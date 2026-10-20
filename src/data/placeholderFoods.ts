@@ -13,7 +13,13 @@ export interface FoodItem {
     hindi?: string;
     telugu?: string;
   };
+  synonyms?: string[]; // Transliterated Roman synonyms (e.g. ["tuvar", "arhar", "paruppu", "kandi pappu"])
   source: 'USDA' | 'own_measurement' | 'label';
+  method?: 'weighed' | 'label' | 'estimated';
+  confidence?: number; // 0 to 1 confidence score
+  supportsOilSlider?: boolean; // Displaced or added tadka fat
+  supportsKatori?: boolean; // Supports "My Katori" calibration
+  supportsPhulka?: boolean; // Supports "My Phulka" calibration
   isCookedRecipe?: boolean;
   densityKcalPerGram?: number;
   per100g: {
@@ -28,6 +34,38 @@ export interface FoodItem {
   verifiedNote?: string;
 }
 
+export interface LoggedFoodItem {
+  id: string;
+  foodId: string;
+  name: string;
+  mealType: 'breakfast' | 'lunch' | 'snack' | 'dinner';
+  portionLabel: string;
+  grams: number;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  source: 'USDA' | 'own_measurement' | 'label';
+  oilLevel?: 'normal' | 'medium' | 'high';
+  confidence?: number;
+}
+
+export function applyOilModifier(
+  nutrients: { kcal: number; protein: number; carbs: number; fat: number; fiber: number },
+  oilLevel: 'normal' | 'medium' | 'high'
+) {
+  const extraOilGrams = oilLevel === 'medium' ? 5 : oilLevel === 'high' ? 10 : 0;
+  if (extraOilGrams === 0) return { ...nutrients };
+  return {
+    kcal: nutrients.kcal + extraOilGrams * 9,
+    protein: nutrients.protein,
+    carbs: nutrients.carbs,
+    fat: Math.round((nutrients.fat + extraOilGrams) * 10) / 10,
+    fiber: nutrients.fiber,
+  };
+}
+
 export const PLACEHOLDER_FOODS: FoodItem[] = [
   {
     id: 'f-toor-dal',
@@ -38,7 +76,12 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'अरहर दाल तड़का (Arhar Dal Tadka)',
       telugu: 'కందిపప్పు తాలింపు (Kandi Pappu)',
     },
+    synonyms: ['toor dal', 'tuvar', 'arhar', 'paruppu', 'kandi pappu', 'peeli dal', 'yellow dal', 'dal tadka'],
     source: 'own_measurement',
+    method: 'weighed',
+    confidence: 1.0,
+    supportsOilSlider: true,
+    supportsKatori: true,
     isCookedRecipe: true,
     densityKcalPerGram: 1.21,
     per100g: {
@@ -66,7 +109,11 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'फुल्का / सादी रोटी (Phulka Roti)',
       telugu: 'పుల్కా / రొట్టె (Phulka Rotte)',
     },
+    synonyms: ['phulka', 'roti', 'chapati', 'chappathi', 'rotte', 'wheat roti', 'atta roti'],
     source: 'USDA',
+    method: 'weighed',
+    confidence: 0.95,
+    supportsPhulka: true,
     per100g: {
       kcal: 295,
       protein: 10.5,
@@ -92,7 +139,12 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'सांभर (Sambar)',
       telugu: 'సాంబారు (Sambaru)',
     },
+    synonyms: ['sambar', 'sambhar', 'kuzhambu', 'murungakkai sambar', 'veg sambar'],
     source: 'own_measurement',
+    method: 'weighed',
+    confidence: 1.0,
+    supportsOilSlider: true,
+    supportsKatori: true,
     isCookedRecipe: true,
     densityKcalPerGram: 0.78,
     per100g: {
@@ -119,7 +171,12 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'पनीर भुर्जी (Paneer Bhurji)',
       telugu: 'పనీర్ భుర్జీ (Paneer Bhurji)',
     },
+    synonyms: ['paneer bhurji', 'scrambled paneer', 'cottage cheese bhurji', 'paneer'],
     source: 'own_measurement',
+    method: 'weighed',
+    confidence: 1.0,
+    supportsOilSlider: true,
+    supportsKatori: true,
     isCookedRecipe: true,
     per100g: {
       kcal: 205,
@@ -145,7 +202,11 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'चावल (Basmati Chawal)',
       telugu: 'అన్నం (Annam)',
     },
+    synonyms: ['basmati rice', 'chawal', 'saadham', 'annam', 'steamed rice', 'cooked rice', 'bhat'],
     source: 'USDA',
+    method: 'weighed',
+    confidence: 0.95,
+    supportsKatori: true,
     per100g: {
       kcal: 130,
       protein: 2.7,
@@ -169,7 +230,12 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
       hindi: 'चिकन करी (Chicken Curry)',
       telugu: 'కోడికూర (Kodi Kura)',
     },
+    synonyms: ['chicken curry', 'kozhi kulambu', 'kodi kura', 'murgh curry', 'chicken breast curry'],
     source: 'own_measurement',
+    method: 'weighed',
+    confidence: 1.0,
+    supportsOilSlider: true,
+    supportsKatori: true,
     isCookedRecipe: true,
     per100g: {
       kcal: 148,
@@ -193,19 +259,23 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
     regionalNames: {
       hindi: 'व्हे प्रोटीन (Whey)',
     },
+    synonyms: ['whey', 'whey protein', 'isolate', 'protein shake', 'protein powder', 'wpi'],
     source: 'label',
+    method: 'label',
+    confidence: 0.98,
     per100g: {
       kcal: 375,
       protein: 85.0,
       carbs: 2.5,
-      fat: 1.5,
+      fat: 1.8,
       fiber: 0.0,
     },
     defaultPortionIndex: 0,
     portions: [
-      { name: 'scoop_1', label: '1 Standard Scoop (30g)', grams: 30 },
-      { name: 'scoop_1_5', label: '1.5 Scoops (45g)', grams: 45 },
+      { name: '1_scoop', label: '1 Scoop in Water (30g)', grams: 30 },
+      { name: '1.5_scoop', label: '1.5 Scoops (45g)', grams: 45 },
     ],
+    verifiedNote: 'Verified nutritional label from 3rd-party lab certified batch',
   },
   {
     id: 'f-roasted-chana',
@@ -214,32 +284,40 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
     regionalNames: {
       tamil: 'பொட்டுக்கடலை (Pottukadalai)',
       hindi: 'भुना चना (Bhuna Chana)',
-      telugu: 'పుట్నాల పప్పు (Putnala Pappu)',
+      telugu: 'పుట్నాలు (Putnalu)',
     },
+    synonyms: ['bhuna chana', 'roasted chana', 'pottukadalai', 'putnalu', 'chana snack'],
     source: 'USDA',
+    method: 'weighed',
+    confidence: 0.92,
     per100g: {
       kcal: 368,
-      protein: 19.0,
-      carbs: 58.0,
+      protein: 19.3,
+      carbs: 58.1,
       fat: 5.5,
-      fiber: 15.0,
+      fiber: 15.2,
     },
     defaultPortionIndex: 0,
     portions: [
-      { name: 'handful', label: '1 Fistful Snack (30g)', grams: 30 },
-      { name: 'katori', label: '1 Small Bowl (50g)', grams: 50 },
+      { name: 'fistful', label: '1 Fistful Snack (35g)', grams: 35 },
+      { name: 'bowl', label: '1 Katori Snack (70g)', grams: 70 },
     ],
+    verifiedNote: 'Unsalted dry roasted chickpeas with natural fiber coat',
   },
   {
     id: 'f-curd-dahi',
-    name: 'Home-set Curd / Dahi (Cow Milk)',
+    name: 'Curd / Dahi (Homemade from Cow Milk)',
     category: 'Dairy & Snacks',
     regionalNames: {
       tamil: 'தயிர் (Thayir)',
       hindi: 'दही (Dahi)',
       telugu: 'పెరుగు (Perugu)',
     },
+    synonyms: ['curd', 'dahi', 'thayir', 'perugu', 'yogurt', 'homemade curd'],
     source: 'USDA',
+    method: 'weighed',
+    confidence: 0.90,
+    supportsKatori: true,
     per100g: {
       kcal: 61,
       protein: 3.5,
@@ -250,49 +328,10 @@ export const PLACEHOLDER_FOODS: FoodItem[] = [
     defaultPortionIndex: 0,
     portions: [
       { name: 'katori', label: '1 Katori (150g)', grams: 150 },
-      { name: 'half_katori', label: 'Small Portion (100g)', grams: 100 },
-    ],
-  },
-  {
-    id: 'f-boiled-eggs',
-    name: 'Whole Boiled Egg (Large)',
-    category: 'High Protein',
-    regionalNames: {
-      tamil: 'வேகவைத்த முட்டை (Muttai)',
-      hindi: 'उबला अंडा (Ubla Anda)',
-      telugu: 'ఉడికించిన గుడ్డు (Guddu)',
-    },
-    source: 'USDA',
-    per100g: {
-      kcal: 143,
-      protein: 12.6,
-      carbs: 0.7,
-      fat: 9.5,
-      fiber: 0.0,
-    },
-    defaultPortionIndex: 1,
-    portions: [
-      { name: 'egg_1', label: '1 Egg (50g)', grams: 50 },
-      { name: 'egg_2', label: '2 Eggs (100g)', grams: 100 },
-      { name: 'egg_3', label: '3 Eggs (150g)', grams: 150 },
+      { name: 'glass', label: '1 Tall Glass Chaas (200g)', grams: 200 },
     ],
   },
 ];
-
-export interface LoggedFoodItem {
-  id: string;
-  foodId: string;
-  name: string;
-  mealType: 'breakfast' | 'lunch' | 'snack' | 'dinner';
-  portionLabel: string;
-  grams: number;
-  kcal: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber: number;
-  source: string;
-}
 
 export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
   {
@@ -308,6 +347,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 1.3,
     fiber: 5.1,
     source: 'USDA',
+    confidence: 0.95,
   },
   {
     id: 'log-2',
@@ -322,6 +362,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 5.0,
     fiber: 6.5,
     source: 'own_measurement',
+    confidence: 1.0,
   },
   {
     id: 'log-3',
@@ -336,6 +377,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 0.5,
     fiber: 0.6,
     source: 'USDA',
+    confidence: 0.95,
   },
   {
     id: 'log-4',
@@ -350,6 +392,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 12.4,
     fiber: 1.8,
     source: 'own_measurement',
+    confidence: 1.0,
   },
   {
     id: 'log-5',
@@ -364,6 +407,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 0.5,
     fiber: 0.0,
     source: 'label',
+    confidence: 0.98,
   },
   {
     id: 'log-6',
@@ -378,6 +422,7 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 1.9,
     fiber: 5.3,
     source: 'USDA',
+    confidence: 0.92,
   },
   {
     id: 'log-7',
@@ -392,5 +437,6 @@ export const INITIAL_TODAY_LOGS: LoggedFoodItem[] = [
     fat: 23.2,
     fiber: 1.9,
     source: 'own_measurement',
+    confidence: 1.0,
   },
 ];

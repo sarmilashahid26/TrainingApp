@@ -8,18 +8,17 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Modal,
-  Alert,
 } from 'react-native';
 import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useNutrition } from '@/context/NutritionContext';
-import { FoodItem, FoodPortion } from '@/data/placeholderFoods';
+import { FoodItem, FoodPortion, applyOilModifier } from '@/data/placeholderFoods';
 
 const theme = Colors.dark;
 
 type Language = 'all' | 'english' | 'tamil' | 'hindi' | 'telugu';
 
 export default function SearchScreen() {
-  const { foods, addLog } = useNutrition();
+  const { foods, addLog, userCalibrations } = useNutrition();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState<Language>('all');
@@ -29,19 +28,20 @@ export default function SearchScreen() {
   const [activeFood, setActiveFood] = useState<FoodItem | null>(null);
   const [selectedPortion, setSelectedPortion] = useState<FoodPortion | null>(null);
   const [customGrams, setCustomGrams] = useState<string>('150');
+  const [isCookedMode, setIsCookedMode] = useState<boolean>(true);
+  const [oilLevel, setOilLevel] = useState<'normal' | 'medium' | 'high'>('normal');
   const [targetMeal, setTargetMeal] = useState<'breakfast' | 'lunch' | 'snack' | 'dinner'>('lunch');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const categories = ['All', 'Dal & Curries', 'Breads & Grains', 'High Protein', 'Dairy & Snacks'];
 
+  // Transliteration-aware search: matches names, regional scripts, and colloquial Roman synonyms
   const filteredFoods = useMemo(() => {
     return foods.filter((item) => {
-      // Category filter
       if (selectedCategory !== 'All' && item.category !== selectedCategory) {
         return false;
       }
 
-      // Query filter across all languages
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
 
@@ -49,13 +49,14 @@ export default function SearchScreen() {
       const tamilMatch = item.regionalNames.tamil?.toLowerCase().includes(q) ?? false;
       const hindiMatch = item.regionalNames.hindi?.toLowerCase().includes(q) ?? false;
       const teluguMatch = item.regionalNames.telugu?.toLowerCase().includes(q) ?? false;
+      const synonymMatch = item.synonyms?.some((syn) => syn.toLowerCase().includes(q)) ?? false;
 
-      if (selectedLanguage === 'tamil') return tamilMatch || nameMatch;
-      if (selectedLanguage === 'hindi') return hindiMatch || nameMatch;
-      if (selectedLanguage === 'telugu') return teluguMatch || nameMatch;
-      if (selectedLanguage === 'english') return nameMatch;
+      if (selectedLanguage === 'tamil') return tamilMatch || nameMatch || synonymMatch;
+      if (selectedLanguage === 'hindi') return hindiMatch || nameMatch || synonymMatch;
+      if (selectedLanguage === 'telugu') return teluguMatch || nameMatch || synonymMatch;
+      if (selectedLanguage === 'english') return nameMatch || synonymMatch;
 
-      return nameMatch || tamilMatch || hindiMatch || teluguMatch;
+      return nameMatch || tamilMatch || hindiMatch || teluguMatch || synonymMatch;
     });
   }, [foods, searchQuery, selectedLanguage, selectedCategory]);
 
@@ -64,6 +65,8 @@ export default function SearchScreen() {
     const defaultPortion = food.portions[food.defaultPortionIndex] || food.portions[0];
     setSelectedPortion(defaultPortion);
     setCustomGrams(defaultPortion.grams.toString());
+    setIsCookedMode(food.source === 'own_measurement' || food.name.toLowerCase().includes('cooked'));
+    setOilLevel('normal');
   };
 
   const getEffectiveGrams = (): number => {
@@ -74,13 +77,14 @@ export default function SearchScreen() {
   const calculateActiveNutrition = (food: FoodItem, grams: number) => {
     const factor = grams / 100;
     const round1 = (n: number) => Math.round(n * 10) / 10;
-    return {
+    const base = {
       kcal: Math.round(food.per100g.kcal * factor),
       protein: round1(food.per100g.protein * factor),
       carbs: round1(food.per100g.carbs * factor),
       fat: round1(food.per100g.fat * factor),
       fiber: round1(food.per100g.fiber * factor),
     };
+    return applyOilModifier(base, oilLevel);
   };
 
   const handleConfirmLog = () => {
@@ -88,9 +92,11 @@ export default function SearchScreen() {
     const grams = getEffectiveGrams();
     const nutrition = calculateActiveNutrition(activeFood, grams);
 
+    const oilSuffix = oilLevel === 'medium' ? ' (+5g tadka oil)' : oilLevel === 'high' ? ' (+10g restaurant oil)' : '';
+
     addLog({
       foodId: activeFood.id,
-      name: activeFood.name,
+      name: `${activeFood.name}${isCookedMode ? ' (Cooked)' : ' (Raw)'}${oilSuffix}`,
       mealType: targetMeal,
       portionLabel: `${selectedPortion.label} (${grams}g)`,
       grams,
@@ -100,6 +106,8 @@ export default function SearchScreen() {
       fat: nutrition.fat,
       fiber: nutrition.fiber,
       source: activeFood.source,
+      oilLevel,
+      confidence: activeFood.confidence ?? 0.9,
     });
 
     const loggedName = activeFood.name;
@@ -108,66 +116,94 @@ export default function SearchScreen() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const adjustGrams = (delta: number) => {
+    const current = getEffectiveGrams();
+    const next = Math.max(10, current + delta);
+    setCustomGrams(next.toString());
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Indian Food Database</Text>
+          <Text style={styles.largeTitle}>Foods</Text>
           <Text style={styles.subtitle}>
-            Offline-first database with authentic regional portions & yield metrics
+            Verified Indian database with katori portions & cooked yields
           </Text>
         </View>
 
         {/* Search Bar */}
         <View style={styles.searchBarContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search dal, phulka, sambar, சாம்பார், दाल..."
-            placeholderTextColor={theme.textTertiary}
+            placeholder="Search food or dish (e.g. dal, roti)..."
+            placeholderTextColor={theme.textFaint}
             value={searchQuery}
             onChangeText={setSearchQuery}
             clearButtonMode="while-editing"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={styles.clearSearchText}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Regional Language Filter Pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.langPillsScroll} contentContainerStyle={styles.langPillsContent}>
-          <Text style={styles.langLabel}>Language:</Text>
+        {/* Regional Language Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterContent}
+        >
           {[
             { id: 'all', label: 'All' },
             { id: 'english', label: 'English' },
-            { id: 'tamil', label: 'தமிழ் (Tamil)' },
-            { id: 'hindi', label: 'हिंदी (Hindi)' },
-            { id: 'telugu', label: 'తెలుగు (Telugu)' },
+            { id: 'tamil', label: 'தமிழ்' },
+            { id: 'hindi', label: 'हिंदी' },
+            { id: 'telugu', label: 'తెలుగు' },
           ].map((lang) => (
             <TouchableOpacity
               key={lang.id}
-              style={[styles.langPill, selectedLanguage === lang.id && styles.langPillActive]}
+              style={[styles.filterChip, selectedLanguage === lang.id && styles.filterChipActive]}
               onPress={() => setSelectedLanguage(lang.id as Language)}
             >
-              <Text style={[styles.langPillText, selectedLanguage === lang.id && styles.langPillTextActive]}>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedLanguage === lang.id && styles.filterChipTextActive,
+                ]}
+              >
                 {lang.label}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Category Filter Pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catPillsScroll} contentContainerStyle={styles.catPillsContent}>
+        {/* Category Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterContent}
+        >
           {categories.map((cat) => (
             <TouchableOpacity
               key={cat}
-              style={[styles.catPill, selectedCategory === cat && styles.catPillActive]}
+              style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
               onPress={() => setSelectedCategory(cat)}
             >
-              <Text style={[styles.catPillText, selectedCategory === cat && styles.catPillTextActive]}>
+              <Text
+                style={[
+                  styles.filterChipText,
+                  selectedCategory === cat && styles.filterChipTextActive,
+                ]}
+              >
                 {cat}
               </Text>
             </TouchableOpacity>
@@ -177,18 +213,21 @@ export default function SearchScreen() {
         {/* Toast Alert */}
         {toastMessage && (
           <View style={styles.toastContainer}>
-            <Text style={styles.toastText}>✅ {toastMessage}</Text>
+            <Text style={styles.toastText}>{toastMessage}</Text>
           </View>
         )}
 
         {/* Food Items List */}
-        <ScrollView style={styles.foodList} contentContainerStyle={styles.foodListContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.foodList}
+          contentContainerStyle={styles.foodListContent}
+          showsVerticalScrollIndicator={false}
+        >
           {filteredFoods.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>🔎</Text>
               <Text style={styles.emptyStateTitle}>No Foods Found</Text>
               <Text style={styles.emptyStateSubtitle}>
-                Try adjusting your search query or language filter. You can also build a custom recipe in the Yield Engine!
+                Try typing colloquial names like "paruppu", "arhar", or "tuvar".
               </Text>
             </View>
           ) : (
@@ -197,57 +236,67 @@ export default function SearchScreen() {
                 key={item.id}
                 style={styles.foodCard}
                 onPress={() => handleOpenPortionModal(item)}
-                activeOpacity={0.75}
+                activeOpacity={0.8}
               >
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleCol}>
-                    <Text style={styles.cardFoodName}>{item.name}</Text>
+                <View style={styles.foodCardHeader}>
+                  <View style={styles.foodNameCol}>
+                    <Text style={styles.foodName}>{item.name}</Text>
                     {item.regionalNames.tamil && (
                       <Text style={styles.regionalSubText}>{item.regionalNames.tamil}</Text>
                     )}
                     {item.regionalNames.hindi && !item.regionalNames.tamil && (
                       <Text style={styles.regionalSubText}>{item.regionalNames.hindi}</Text>
                     )}
+                    {item.regionalNames.telugu && !item.regionalNames.tamil && !item.regionalNames.hindi && (
+                      <Text style={styles.regionalSubText}>{item.regionalNames.telugu}</Text>
+                    )}
                   </View>
-                  <View style={[styles.sourceBadge, item.source === 'own_measurement' ? styles.sourceYieldBadge : styles.sourceUsdaBadge]}>
-                    <Text style={styles.sourceBadgeText}>
-                      {item.source === 'own_measurement' ? 'Yield Cooked' : item.source.toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
 
-                {/* Portions Available Preview */}
-                <View style={styles.portionsRow}>
-                  {item.portions.slice(0, 3).map((p, idx) => (
-                    <View key={idx} style={styles.portionChip}>
-                      <Text style={styles.portionChipText}>{p.label}</Text>
+                  {/* Confidence & Source Badges */}
+                  <View style={styles.badgeCol}>
+                    <View
+                      style={[
+                        styles.sourceBadge,
+                        item.source === 'own_measurement' && styles.sourceBadgeYield,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.sourceBadgeText,
+                          item.source === 'own_measurement' && styles.sourceBadgeYieldText,
+                        ]}
+                      >
+                        {item.source === 'own_measurement' ? 'Cooked Yield' : item.source.toUpperCase()}
+                      </Text>
                     </View>
-                  ))}
+                    <View style={styles.confidencePill}>
+                      <Text style={styles.confidencePillText}>
+                        {Math.round((item.confidence ?? 0.9) * 100)}% Verified
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
                 {/* Macro Strip */}
-                <View style={styles.cardFooter}>
-                  <View style={styles.cardMacros}>
-                    <Text style={styles.cardKcal}>{item.per100g.kcal} kcal/100g</Text>
-                    <Text style={styles.cardMacroItem}>• P: <Text style={{ color: theme.protein }}>{item.per100g.protein}g</Text></Text>
-                    <Text style={styles.cardMacroItem}>• C: <Text style={{ color: theme.carbs }}>{item.per100g.carbs}g</Text></Text>
-                    <Text style={styles.cardMacroItem}>• F: <Text style={{ color: theme.fat }}>{item.per100g.fat}g</Text></Text>
-                  </View>
-                  <View style={styles.addBtnSmall}>
-                    <Text style={styles.addBtnSmallText}>+ Log</Text>
-                  </View>
+                <View style={styles.foodCardFooter}>
+                  <Text style={styles.macroStripText}>
+                    <Text style={styles.macroKcal}>{item.per100g.kcal} kcal</Text>
+                    {'   '}
+                    <Text style={{ color: theme.protein }}>P {item.per100g.protein}g</Text>
+                    {'   '}
+                    <Text style={{ color: theme.carbs }}>C {item.per100g.carbs}g</Text>
+                    {'   '}
+                    <Text style={{ color: theme.fats }}>F {item.per100g.fat}g</Text>
+                  </Text>
+                  <Text style={styles.tapToLogHint}>+ Log</Text>
                 </View>
-
-                {item.verifiedNote && (
-                  <Text style={styles.verifiedNoteText}>💡 {item.verifiedNote}</Text>
-                )}
               </TouchableOpacity>
             ))
           )}
         </ScrollView>
       </View>
 
-      {/* Portion & Meal Selection Modal */}
+      {/* Portion & Meal Selection Modal (Add Food) */}
       <Modal visible={activeFood !== null} transparent animationType="slide">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
@@ -256,15 +305,64 @@ export default function SearchScreen() {
                 <View style={styles.sheetHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.sheetFoodName}>{activeFood.name}</Text>
-                    <Text style={styles.sheetCategory}>{activeFood.category} • Source: {activeFood.source}</Text>
+                    <Text style={styles.sheetSubtitle}>
+                      {activeFood.category} · {Math.round((activeFood.confidence ?? 0.9) * 100)}% Verified Confidence
+                    </Text>
                   </View>
-                  <TouchableOpacity onPress={() => setActiveFood(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setActiveFood(null)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
                     <Text style={styles.closeSheetText}>✕</Text>
                   </TouchableOpacity>
                 </View>
 
+                {/* Raw vs Cooked Toggle */}
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, !isCookedMode && styles.toggleBtnActive]}
+                    onPress={() => setIsCookedMode(false)}
+                  >
+                    <Text style={[styles.toggleBtnText, !isCookedMode && styles.toggleBtnTextActive]}>
+                      Raw
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, isCookedMode && styles.toggleBtnActive]}
+                    onPress={() => setIsCookedMode(true)}
+                  >
+                    <Text style={[styles.toggleBtnText, isCookedMode && styles.toggleBtnTextActive]}>
+                      Cooked
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Oil Slider for Dishes with Tempering/Gravy */}
+                {activeFood.supportsOilSlider && (
+                  <View style={styles.oilSliderContainer}>
+                    <Text style={styles.sectionLabel}>Tadka & Cooking Oil Level</Text>
+                    <View style={styles.oilPillsRow}>
+                      {[
+                        { id: 'normal', label: 'Low / Normal (+0g)' },
+                        { id: 'medium', label: 'Medium (+5g oil)' },
+                        { id: 'high', label: 'Restaurant (+10g oil)' },
+                      ].map((lvl) => (
+                        <TouchableOpacity
+                          key={lvl.id}
+                          style={[styles.oilPill, oilLevel === lvl.id && styles.oilPillActive]}
+                          onPress={() => setOilLevel(lvl.id as 'normal' | 'medium' | 'high')}
+                        >
+                          <Text style={[styles.oilPillText, oilLevel === lvl.id && styles.oilPillTextActive]}>
+                            {lvl.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
                 {/* Target Meal Selector */}
-                <Text style={styles.sheetSectionTitle}>Select Meal</Text>
+                <Text style={styles.sectionLabel}>Meal Slot</Text>
                 <View style={styles.mealPillsRow}>
                   {(['breakfast', 'lunch', 'snack', 'dinner'] as const).map((m) => (
                     <TouchableOpacity
@@ -273,27 +371,84 @@ export default function SearchScreen() {
                       onPress={() => setTargetMeal(m)}
                     >
                       <Text style={[styles.mealPillText, targetMeal === m && styles.mealPillTextActive]}>
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
+                        {m === 'snack' ? 'Snacks' : m.charAt(0).toUpperCase() + m.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                {/* Portion Selector (Katori, Grams, etc.) */}
-                <Text style={styles.sheetSectionTitle}>Household Measure / Serving</Text>
+                {/* Portion Selector with Indian Units & Household Calibrations */}
+                <Text style={styles.sectionLabel}>Indian Household Portion</Text>
                 <View style={styles.portionsGrid}>
+                  {/* Household Calibration Quick Buttons */}
+                  {activeFood.supportsKatori && (
+                    <TouchableOpacity
+                      style={[
+                        styles.portionBtn,
+                        styles.calibratedPortionBtn,
+                        customGrams === userCalibrations.katoriGrams.toString() && styles.portionBtnActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedPortion({
+                          name: 'my_katori',
+                          label: `My Katori (${userCalibrations.katoriGrams}g)`,
+                          grams: userCalibrations.katoriGrams,
+                        });
+                        setCustomGrams(userCalibrations.katoriGrams.toString());
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.portionBtnText,
+                          styles.calibratedPortionBtnText,
+                          customGrams === userCalibrations.katoriGrams.toString() && styles.portionBtnTextActive,
+                        ]}
+                      >
+                        ⭐ My Katori ({userCalibrations.katoriGrams}g)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {activeFood.supportsPhulka && (
+                    <TouchableOpacity
+                      style={[
+                        styles.portionBtn,
+                        styles.calibratedPortionBtn,
+                        customGrams === userCalibrations.rotiGrams.toString() && styles.portionBtnActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedPortion({
+                          name: 'my_phulka',
+                          label: `My Phulka (${userCalibrations.rotiGrams}g)`,
+                          grams: userCalibrations.rotiGrams,
+                        });
+                        setCustomGrams(userCalibrations.rotiGrams.toString());
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.portionBtnText,
+                          styles.calibratedPortionBtnText,
+                          customGrams === userCalibrations.rotiGrams.toString() && styles.portionBtnTextActive,
+                        ]}
+                      >
+                        ⭐ My Phulka ({userCalibrations.rotiGrams}g)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
                   {activeFood.portions.map((portion, idx) => {
                     const isSelected = selectedPortion?.label === portion.label;
                     return (
                       <TouchableOpacity
                         key={idx}
-                        style={[styles.portionSelectBtn, isSelected && styles.portionSelectBtnActive]}
+                        style={[styles.portionBtn, isSelected && styles.portionBtnActive]}
                         onPress={() => {
                           setSelectedPortion(portion);
                           setCustomGrams(portion.grams.toString());
                         }}
                       >
-                        <Text style={[styles.portionSelectBtnText, isSelected && styles.portionSelectBtnTextActive]}>
+                        <Text style={[styles.portionBtnText, isSelected && styles.portionBtnTextActive]}>
                           {portion.label}
                         </Text>
                       </TouchableOpacity>
@@ -301,58 +456,85 @@ export default function SearchScreen() {
                   })}
                 </View>
 
-                {/* Exact Grams Input */}
-                <View style={styles.gramsInputRow}>
-                  <Text style={styles.gramsInputLabel}>Weighed Weight (g):</Text>
-                  <TextInput
-                    style={styles.gramsInput}
-                    keyboardType="numeric"
-                    value={customGrams}
-                    onChangeText={setCustomGrams}
-                  />
-                  <Text style={styles.gramsUnit}>grams</Text>
+                {/* Portion Stepper with Weighed Grams */}
+                <Text style={styles.sectionLabel}>Weighed Weight (grams)</Text>
+                <View style={styles.stepperRow}>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => adjustGrams(-10)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.stepperBtnText}>- 10g</Text>
+                  </TouchableOpacity>
+                  <View style={styles.stepperInputWrapper}>
+                    <TextInput
+                      style={styles.stepperInput}
+                      keyboardType="numeric"
+                      value={customGrams}
+                      onChangeText={setCustomGrams}
+                    />
+                    <Text style={styles.stepperUnit}>g</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() => adjustGrams(10)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.stepperBtnText}>+ 10g</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Live Nutrition Calculation Box */}
+                {/* Live Macro Grid (Strict Order: Protein, Carbs, Fats, Fibre) */}
                 {(() => {
                   const g = getEffectiveGrams();
                   const calc = calculateActiveNutrition(activeFood, g);
                   return (
-                    <View style={styles.liveCalculationBox}>
-                      <Text style={styles.liveCalcTitle}>PORTION TOTAL ({g}g)</Text>
-                      <View style={styles.liveCalcStats}>
-                        <View style={styles.liveStatItem}>
-                          <Text style={styles.liveStatNum}>{calc.kcal}</Text>
-                          <Text style={styles.liveStatLabel}>kcal</Text>
+                    <View style={styles.liveMacroCard}>
+                      <View style={styles.liveMacroHeader}>
+                        <Text style={styles.liveMacroKcal}>{calc.kcal} kcal</Text>
+                        <Text style={styles.liveMacroWeight}>
+                          {g}g portion {oilLevel !== 'normal' ? '· Tadka Adjusted' : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.liveMacroRow}>
+                        <View style={styles.liveMacroCol}>
+                          <Text style={[styles.liveMacroValue, { color: theme.protein }]}>
+                            {calc.protein}g
+                          </Text>
+                          <Text style={styles.liveMacroLabel}>Protein</Text>
                         </View>
-                        <View style={styles.liveStatItem}>
-                          <Text style={[styles.liveStatNum, { color: theme.protein }]}>{calc.protein}g</Text>
-                          <Text style={styles.liveStatLabel}>Protein</Text>
+                        <View style={styles.liveMacroCol}>
+                          <Text style={[styles.liveMacroValue, { color: theme.carbs }]}>
+                            {calc.carbs}g
+                          </Text>
+                          <Text style={styles.liveMacroLabel}>Carbs</Text>
                         </View>
-                        <View style={styles.liveStatItem}>
-                          <Text style={[styles.liveStatNum, { color: theme.carbs }]}>{calc.carbs}g</Text>
-                          <Text style={styles.liveStatLabel}>Carbs</Text>
+                        <View style={styles.liveMacroCol}>
+                          <Text style={[styles.liveMacroValue, { color: theme.fats }]}>
+                            {calc.fat}g
+                          </Text>
+                          <Text style={styles.liveMacroLabel}>Fats</Text>
                         </View>
-                        <View style={styles.liveStatItem}>
-                          <Text style={[styles.liveStatNum, { color: theme.fat }]}>{calc.fat}g</Text>
-                          <Text style={styles.liveStatLabel}>Fat</Text>
-                        </View>
-                        <View style={styles.liveStatItem}>
-                          <Text style={[styles.liveStatNum, { color: theme.fiber }]}>{calc.fiber}g</Text>
-                          <Text style={styles.liveStatLabel}>Fibre</Text>
+                        <View style={styles.liveMacroCol}>
+                          <Text style={[styles.liveMacroValue, { color: theme.fibre }]}>
+                            {calc.fiber}g
+                          </Text>
+                          <Text style={styles.liveMacroLabel}>Fibre</Text>
                         </View>
                       </View>
                     </View>
                   );
                 })()}
 
-                {/* Submit Button */}
+                {/* Single Full-Width Primary Action at Bottom */}
                 <TouchableOpacity
-                  style={styles.confirmLogBtn}
+                  style={styles.addDiaryBtn}
                   onPress={handleConfirmLog}
-                  activeOpacity={0.8}
+                  activeOpacity={0.85}
                 >
-                  <Text style={styles.confirmLogBtnText}>Confirm & Log to {targetMeal.toUpperCase()}</Text>
+                  <Text style={styles.addDiaryBtnText}>
+                    Add to Diary · {targetMeal.toUpperCase()}
+                  </Text>
                 </TouchableOpacity>
               </>
             )}
@@ -370,425 +552,449 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
   },
   header: {
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.sm,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
     color: theme.text,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 12,
-    color: theme.textSecondary,
+    fontSize: 13,
+    color: theme.textMuted,
     marginTop: 2,
   },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 10,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    height: 38,
     borderWidth: 1,
     borderColor: theme.border,
-    marginVertical: Spacing.two,
+    marginVertical: Spacing.xs,
   },
   searchIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    fontSize: 14,
+    marginRight: 6,
+    color: theme.textFaint,
   },
   searchInput: {
     flex: 1,
     color: theme.text,
-    fontSize: 14,
+    fontSize: 13,
+    paddingVertical: 0,
   },
   clearSearchText: {
-    color: theme.textTertiary,
+    color: theme.textFaint,
     fontSize: 14,
     paddingHorizontal: 4,
   },
-  langPillsScroll: {
+  filterScroll: {
     maxHeight: 38,
     marginBottom: 6,
   },
-  langPillsContent: {
+  filterContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  langLabel: {
-    fontSize: 11,
-    color: theme.textTertiary,
-    fontWeight: '700',
-    marginRight: 2,
-  },
-  langPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: theme.surfaceElevated,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  langPillActive: {
-    backgroundColor: theme.primaryMuted,
-    borderColor: theme.primary,
-  },
-  langPillText: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    fontWeight: '600',
-  },
-  langPillTextActive: {
-    color: theme.primary,
-    fontWeight: '800',
-  },
-  catPillsScroll: {
-    maxHeight: 38,
-    marginBottom: Spacing.two,
-  },
-  catPillsContent: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  catPill: {
+  filterChip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: Radius.md,
-    backgroundColor: theme.surface,
-    borderWidth: 1,
-    borderColor: theme.border,
+    minHeight: 36,
+    borderRadius: Radius.pill,
+    backgroundColor: theme.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  catPillActive: {
-    backgroundColor: theme.surfaceElevated,
-    borderColor: theme.primary,
+  filterChipActive: {
+    backgroundColor: theme.primaryMuted,
   },
-  catPillText: {
+  filterChipText: {
     fontSize: 12,
-    color: theme.textSecondary,
-    fontWeight: '600',
+    color: theme.textMuted,
+    fontWeight: '500',
+    lineHeight: 18,
   },
-  catPillTextActive: {
-    color: theme.text,
-    fontWeight: '700',
+  filterChipTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
   },
   toastContainer: {
-    backgroundColor: '#064E3B',
+    backgroundColor: theme.surfaceRaised,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: Radius.md,
-    marginBottom: Spacing.two,
-    borderWidth: 1,
-    borderColor: theme.primary,
+    marginVertical: 4,
+    alignItems: 'center',
   },
   toastText: {
-    color: '#D1FAE5',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
+    color: theme.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   foodList: {
     flex: 1,
+    marginTop: 4,
   },
   foodListContent: {
-    paddingBottom: Spacing.six + 30,
-    gap: Spacing.two,
+    paddingBottom: Spacing.xl + 40,
+    gap: Spacing.sm,
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  emptyStateSubtitle: {
+    fontSize: 13,
+    color: theme.textMuted,
+    marginTop: 4,
+    textAlign: 'center',
   },
   foodCard: {
     backgroundColor: theme.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.border,
+    padding: Spacing.md,
+    gap: 10,
   },
-  cardHeader: {
+  foodCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 6,
   },
-  cardTitleCol: {
+  foodNameCol: {
     flex: 1,
-    marginRight: 8,
+    paddingRight: 8,
   },
-  cardFoodName: {
-    fontSize: 15,
-    fontWeight: '700',
+  foodName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: theme.text,
   },
   regionalSubText: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: theme.textMuted,
     marginTop: 2,
   },
+  badgeCol: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
   sourceBadge: {
+    backgroundColor: theme.surfaceRaised,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: Radius.pill,
   },
-  sourceYieldBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  sourceUsdaBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
+  sourceBadgeYield: {
+    backgroundColor: theme.primaryMuted,
   },
   sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: theme.textMuted,
+  },
+  sourceBadgeYieldText: {
+    color: theme.primary,
+  },
+  confidencePill: {
+    backgroundColor: theme.surfaceRaised,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
+  },
+  confidencePillText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: theme.text,
+    fontWeight: '600',
+    color: theme.textFaint,
   },
-  portionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 8,
-  },
-  portionChip: {
-    backgroundColor: theme.surfaceElevated,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-  },
-  portionChipText: {
-    fontSize: 11,
-    color: theme.textSecondary,
-  },
-  cardFooter: {
+  foodCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 6,
+    paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopColor: theme.border,
   },
-  cardMacros: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  cardKcal: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.calories,
-  },
-  cardMacroItem: {
-    fontSize: 11,
-    color: theme.textTertiary,
-  },
-  addBtnSmall: {
-    backgroundColor: theme.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  addBtnSmallText: {
-    color: theme.primary,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  verifiedNoteText: {
-    fontSize: 11,
-    color: theme.accent,
-    marginTop: 6,
-    fontStyle: 'italic',
-  },
-  emptyState: {
-    paddingVertical: 60,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-  },
-  emptyStateIcon: {
-    fontSize: 36,
-    marginBottom: Spacing.two,
-  },
-  emptyStateTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.text,
-    marginBottom: 4,
-  },
-  emptyStateSubtitle: {
+  macroStripText: {
     fontSize: 13,
-    color: theme.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
+    fontVariant: ['tabular-nums'],
+  },
+  macroKcal: {
+    color: theme.calories,
+    fontWeight: '700',
+  },
+  tapToLogHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.primary,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: theme.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.four,
-    borderWidth: 1,
-    borderColor: theme.border,
-    paddingBottom: Spacing.six,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl + 20,
+    maxHeight: '90%',
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.three,
+    marginBottom: Spacing.sm,
   },
   sheetFoodName: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
     color: theme.text,
   },
-  sheetCategory: {
+  sheetSubtitle: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: theme.textMuted,
     marginTop: 2,
   },
   closeSheetText: {
-    fontSize: 18,
-    color: theme.textTertiary,
+    fontSize: 16,
+    color: theme.textFaint,
     padding: 4,
   },
-  sheetSectionTitle: {
+  toggleRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: 3,
+    marginBottom: Spacing.sm,
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: Radius.sm,
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.surfacePressed,
+  },
+  toggleBtnText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  toggleBtnTextActive: {
+    color: theme.text,
+    fontWeight: '600',
+  },
+  oilSliderContainer: {
+    marginBottom: Spacing.sm,
+  },
+  oilPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  oilPill: {
+    flex: 1,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  oilPillActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primaryMuted,
+  },
+  oilPillText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  oilPillTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
+  },
+  sectionLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: theme.textSecondary,
+    fontWeight: '600',
+    color: theme.textFaint,
+    marginTop: Spacing.xs,
+    marginBottom: 6,
     textTransform: 'uppercase',
-    marginBottom: 8,
     letterSpacing: 0.5,
   },
   mealPillsRow: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: Spacing.three,
+    marginBottom: Spacing.sm,
   },
   mealPill: {
     flex: 1,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.pill,
     paddingVertical: 8,
-    borderRadius: Radius.sm,
-    backgroundColor: theme.surfaceElevated,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
   },
   mealPillActive: {
-    backgroundColor: theme.primary,
-    borderColor: theme.primary,
+    backgroundColor: theme.primaryMuted,
   },
   mealPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.textMuted,
   },
   mealPillTextActive: {
-    color: '#000000',
-    fontWeight: '800',
+    color: theme.primary,
+    fontWeight: '600',
   },
   portionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: Spacing.three,
+    gap: 6,
+    marginBottom: Spacing.sm,
   },
-  portionSelectBtn: {
+  portionBtn: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: Radius.md,
-    backgroundColor: theme.surfaceElevated,
+    minHeight: 38,
+    justifyContent: 'center',
+  },
+  calibratedPortionBtn: {
+    backgroundColor: theme.surfacePressed,
     borderWidth: 1,
     borderColor: theme.border,
   },
-  portionSelectBtnActive: {
+  calibratedPortionBtnText: {
+    color: theme.text,
+  },
+  portionBtnActive: {
     backgroundColor: theme.primaryMuted,
+    borderWidth: 1,
     borderColor: theme.primary,
   },
-  portionSelectBtnText: {
+  portionBtnText: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: theme.textMuted,
+    fontWeight: '500',
+  },
+  portionBtnTextActive: {
+    color: theme.primary,
     fontWeight: '600',
   },
-  portionSelectBtnTextActive: {
-    color: theme.primary,
-    fontWeight: '800',
-  },
-  gramsInputRow: {
+  stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.three,
-    gap: 8,
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
-  gramsInputLabel: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    fontWeight: '600',
-  },
-  gramsInput: {
-    backgroundColor: theme.surfaceElevated,
-    borderWidth: 1,
-    borderColor: theme.border,
+  stepperBtn: {
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    color: theme.text,
-    fontSize: 15,
-    fontWeight: '700',
-    width: 80,
-    textAlign: 'center',
+    height: 44,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  gramsUnit: {
+  stepperBtnText: {
     fontSize: 13,
-    color: theme.textTertiary,
+    fontWeight: '600',
+    color: theme.text,
   },
-  liveCalculationBox: {
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.lg,
-    padding: Spacing.three,
+  stepperInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: theme.border,
-    marginBottom: Spacing.three,
+    paddingHorizontal: 12,
+    height: 44,
   },
-  liveCalcTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: theme.textTertiary,
-    letterSpacing: 0.5,
-    marginBottom: 8,
+  stepperInput: {
+    flex: 1,
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
-  liveCalcStats: {
+  stepperUnit: {
+    color: theme.textFaint,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  liveMacroCard: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    marginVertical: Spacing.xs,
+  },
+  liveMacroHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  liveStatItem: {
+  liveMacroKcal: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
+  },
+  liveMacroWeight: {
+    fontSize: 12,
+    color: theme.textMuted,
+  },
+  liveMacroRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  liveMacroCol: {
     alignItems: 'center',
   },
-  liveStatNum: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.text,
+  liveMacroValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
   },
-  liveStatLabel: {
+  liveMacroLabel: {
     fontSize: 10,
-    color: theme.textTertiary,
-    marginTop: 2,
+    color: theme.textFaint,
+    marginTop: 1,
   },
-  confirmLogBtn: {
+  addDiaryBtn: {
     backgroundColor: theme.primary,
     borderRadius: Radius.md,
-    paddingVertical: 14,
+    minHeight: 50,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.sm,
   },
-  confirmLogBtnText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
+  addDiaryBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.onPrimary,
   },
 });

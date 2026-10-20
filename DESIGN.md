@@ -1,320 +1,306 @@
 ---
 version: alpha
 name: maxiii-design-system
-description: "A high-performance, dark-mode nutrition engineering canvas designed for Indian gym-goers, lifters, and home cooks. Built around deep obsidian canvas (#0B0F17), technical charcoal elevation surfaces (#121822 to #1A2230), and hairline slate borders (#232D3F). The chromatic palette features high-velocity Emerald Green (#10B981) for protein hits and target adherence, alongside warm Culinary Saffron Amber (#F59E0B) for home-cooking yields and energy. The design evokes disciplined athletic engineering: dense, numeric-first, fast-logging ergonomics with zero wellness fluff. Typography utilizes modern system sans with tight numeric tracking, prominent macro tags, and household portion affordances (katori, ladle, phulka)."
+description: "A monochrome, Apple Fitness-style dark interface for Indian lifters and home cooks. Near-black canvas (#0A0A0A), graphite cards (#161616), white and grey type, and one accent: saffron (#FF8A1F) for the primary action and calories. Macros are told apart by shade, label and position, not by colour. Numbers are large and bold, the layout is quiet, and every screen has one clear action. Built around Indian portions (katori, ladle, phulka) and the cooked-yield engine."
 
 colors:
-  # Brand & Core Chromatic
-  primary: "#10B981"                 # Emerald green: protein hits, completed goals, primary CTAs
-  primary-hover: "#059669"
-  primary-muted: "rgba(16, 185, 129, 0.16)"
-  on-primary: "#000000"              # High-contrast black text on emerald primary buttons
-  
-  accent: "#F59E0B"                  # Warm Saffron Amber: cooking yield engine, flame, energy
-  accent-hover: "#D97706"
-  accent-muted: "rgba(245, 158, 11, 0.16)"
-  on-accent: "#000000"
+  # Surfaces
+  background: "#0A0A0A"          # Root canvas (never pure black)
+  surface: "#161616"             # Cards, tab bar
+  surface-raised: "#222222"      # Inputs, chips, secondary buttons, ring tracks
+  surface-pressed: "#2C2C2C"     # Pressed and selected states
+  border: "#2E2E2E"              # Dividers and input outlines only (cards have no border)
 
-  # Macro-Nutrient Chromatic Matrix (Fixed & Non-negotiable)
-  protein: "#10B981"                 # Emerald: Lifter priority #1
-  protein-muted: "rgba(16, 185, 129, 0.15)"
-  carbs: "#FBBF24"                   # Gold Amber: Fuel & glycogen
-  carbs-muted: "rgba(251, 191, 36, 0.15)"
-  fat: "#FB7185"                     # Rose Coral: Lipids & oils
-  fat-muted: "rgba(251, 113, 133, 0.15)"
-  fibre: "#A78BFA"                   # Lavender Purple: Digestive fibre goal
-  fibre-muted: "rgba(167, 139, 250, 0.15)"
-  calories: "#38BDF8"                # Electric Sky Blue: Daily energy budget
-  calories-muted: "rgba(56, 189, 248, 0.15)"
+  # The only accent
+  primary: "#FF8A1F"             # Saffron: main button, active tab, calories
+  primary-pressed: "#E67A12"
+  primary-muted: "rgba(255, 138, 31, 0.16)"
+  on-primary: "#0A0A0A"          # Dark text on saffron, never white
 
-  # Text & Ink
-  ink: "#F8FAFC"                     # Primary text: Crisp near-white
-  ink-secondary: "#94A3B8"           # Secondary text: Slate grey
-  ink-tertiary: "#64748B"            # Muted text: Deep slate captions, unit labels
-  ink-inverse: "#0B0F17"             # Deep obsidian for inverse badge text
+  # Text
+  text: "#F2F2F2"
+  text-muted: "#9A9A9A"
+  text-faint: "#858585"          # Units and captions (passes 4.5:1 on surface)
 
-  # Surfaces & Canvas
-  canvas: "#0B0F17"                  # Root background: Deep obsidian blue-black
-  surface-1: "#121822"               # Primary cards, summary panels
-  surface-2: "#1A2230"               # Interactive elements, form fields, secondary buttons
-  surface-3: "#212B3D"               # Active states, selected tabs, floating modals
-  surface-highlight: "#0F181B"       # Subtle green-tinted charcoal for protein highlight cards
+  # Status (the only other colour)
+  danger: "#FF6B6B"              # Over target and errors only
 
-  # Borders & Dividers
-  hairline: "#232D3F"                # Card borders, cell dividers
-  hairline-strong: "#334155"         # Focused inputs, active chips
-  hairline-accent: "rgba(16, 185, 129, 0.35)" # Protein focus rings & yield borders
-
-  # Data Source Verification Badges
-  source-yield-bg: "rgba(16, 185, 129, 0.18)"
-  source-yield-text: "#34D399"
-  source-usda-bg: "rgba(56, 189, 248, 0.18)"
-  source-usda-text: "#38BDF8"
-  source-label-bg: "rgba(245, 158, 11, 0.18)"
-  source-label-text: "#FBBF24"
+  # Data shades (fixed; used only for rings, bars and macro marks)
+  calories: "#FF8A1F"
+  protein: "#FFFFFF"             # Brightest: lifter's priority metric
+  carbs: "#BDBDBD"
+  fats: "#959595"
+  fibre: "#707070"
+  ring-track: "#222222"
 
 typography:
-  display-xl:
-    fontSize: 28px
-    fontWeight: 900
-    letterSpacing: -0.6px
-    lineHeight: 1.15
-  display-lg:
-    fontSize: 22px
-    fontWeight: 800
+  large-title:
+    fontSize: 34px
+    fontWeight: 700
     letterSpacing: -0.4px
-    lineHeight: 1.2
-  heading-md:
-    fontSize: 17px
-    fontWeight: 800
-    letterSpacing: -0.2px
-    lineHeight: 1.3
-  body-md:
-    fontSize: 14px
-    fontWeight: 500
-    letterSpacing: 0px
-    lineHeight: 1.4
-  body-sm:
-    fontSize: 13px
+    lineHeight: 1.15
+  title:
+    fontSize: 22px
     fontWeight: 600
-    letterSpacing: 0px
+    lineHeight: 1.2
+  headline:
+    fontSize: 17px
+    fontWeight: 600
+    lineHeight: 1.3
+  body:
+    fontSize: 15px
+    fontWeight: 400
     lineHeight: 1.4
   caption:
-    fontSize: 11px
-    fontWeight: 700
-    letterSpacing: 0.4px
+    fontSize: 12px
+    fontWeight: 500
     lineHeight: 1.3
-  micro-label:
-    fontSize: 10px
-    fontWeight: 800
-    letterSpacing: 0.6px
-    textTransform: uppercase
+  number-hero:
+    fontSize: 44px
+    fontWeight: 700
+    letterSpacing: -0.8px
+    fontVariant: tabular-nums
 
 rounded:
-  sm: 6px
-  md: 10px
-  lg: 14px
-  xl: 18px
+  sm: 8px
+  md: 14px
+  lg: 20px
   pill: 9999px
 
 spacing:
   xs: 4px
   sm: 8px
-  md: 12px
-  lg: 16px
-  xl: 24px
-  xxl: 32px
+  md: 16px
+  lg: 24px
+  xl: 32px
 
 components:
-  # Navigation & Tabs
   bottom-tab-bar:
-    background: "{colors.surface-1}"
-    borderTop: "1px solid {colors.hairline}"
+    background: "{colors.surface}"
     height: 64px
     activeColor: "{colors.primary}"
-    inactiveColor: "{colors.ink-secondary}"
-    labelSize: 11px
-    labelWeight: 600
-
-  # Calorie Energy Progress Card
-  calorie-budget-card:
-    background: "{colors.surface-1}"
-    border: "1px solid {colors.hairline}"
-    borderRadius: "{rounded.lg}"
-    padding: "{spacing.lg}"
-    remainingHighlightColor: "{colors.primary}"
-    barTrackColor: "{colors.surface-2}"
-    barFillColor: "{colors.primary}"
-
-  # Lifter Macro Card
-  macro-pill-card:
-    background: "{colors.surface-1}"
-    border: "1px solid {colors.hairline}"
-    borderRadius: "{rounded.md}"
-    padding: "{spacing.md}"
-    progressTrack: "{colors.surface-2}"
-    proteinVariant:
-      background: "{colors.surface-highlight}"
-      border: "1px solid {colors.hairline-accent}"
-
-  # Meal Section Group
-  meal-section-group:
-    background: "{colors.surface-1}"
-    border: "1px solid {colors.hairline}"
+    inactiveColor: "{colors.text-muted}"
+  card:
+    background: "{colors.surface}"
     borderRadius: "{rounded.lg}"
     padding: "{spacing.md}"
-    headerBorderBottom: "1px solid {colors.hairline}"
-    rowBorderBottom: "1px solid rgba(255, 255, 255, 0.04)"
-
-  # Buttons
+    border: none
+    shadow: none
   button-primary:
     background: "{colors.primary}"
     textColor: "{colors.on-primary}"
-    fontWeight: 800
-    borderRadius: "{rounded.md}"
-    padding: "12px 16px"
-    minHeight: 44px
-  button-secondary:
-    background: "{colors.surface-2}"
-    textColor: "{colors.ink}"
-    border: "1px solid {colors.hairline}"
     fontWeight: 600
     borderRadius: "{rounded.md}"
-    padding: "10px 14px"
-    minHeight: 40px
-  button-action-small:
-    background: "{colors.primary-muted}"
-    border: "1px solid {colors.hairline-accent}"
-    textColor: "{colors.primary}"
-    borderRadius: "{rounded.sm}"
-    padding: "5px 10px"
-
-  # Form Inputs & Search
-  text-input:
-    background: "{colors.surface-2}"
-    border: "1px solid {colors.hairline}"
+    minHeight: 50px
+    width: 100%
+  button-secondary:
+    background: "{colors.surface-raised}"
+    textColor: "{colors.text}"
     borderRadius: "{rounded.md}"
-    padding: "10px 12px"
-    textColor: "{colors.ink}"
-    placeholderColor: "{colors.ink-tertiary}"
-    focusBorder: "{colors.primary}"
     minHeight: 44px
-
-  # Filter Pills & Language Chips
+  text-input:
+    background: "{colors.surface-raised}"
+    border: "1px solid {colors.border}"
+    focusBorder: "{colors.primary}"
+    borderRadius: "{rounded.md}"
+    minHeight: 44px
   filter-pill:
-    background: "{colors.surface-2}"
-    border: "1px solid {colors.hairline}"
-    borderRadius: "{rounded.pill}"
-    padding: "6px 12px"
+    background: "{colors.surface-raised}"
     activeBackground: "{colors.primary-muted}"
-    activeBorder: "{colors.primary}"
     activeTextColor: "{colors.primary}"
-
-  # Yield Engine Calculator Dashboard
-  yield-results-panel:
-    background: "#0F1A24"
-    border: "1px solid rgba(56, 189, 248, 0.3)"
-    borderRadius: "{rounded.xl}"
-    padding: "{spacing.lg}"
-    densityPillBackground: "rgba(56, 189, 248, 0.15)"
-    densityTextColor: "{colors.calories}"
+    borderRadius: "{rounded.pill}"
+    minHeight: 36px
+  source-badge:
+    background: "{colors.surface-raised}"
+    textColor: "{colors.text-muted}"
+    borderRadius: "{rounded.pill}"
+    fontSize: 11px
 ---
 
-# MAXIII: Visual Design & UX Specification (DESIGN.md)
+# MAXIII: Design Specification (DESIGN.md)
 
-This document serves as the canonical design contract for MAXIII. Any AI agent or developer building or updating screens must strictly follow these rules, component tokens, and ergonomic guidelines.
-
----
-
-## 1. Visual Theme & Atmosphere
-
-- **Core Identity:** Precision athletic engineering for Indian nutrition. MAXIII is built for serious lifters, bodybuilders, and everyday people who weigh their home-cooked dishes.
-- **Atmosphere:** Dark obsidian canvas (`#0B0F17`) reminiscent of technical developer tools (Linear, Raycast) combined with athletic data visualization.
-- **Zero Wellness Fluff:** No pastel watercolor gradients, no stock images of smiling avocados, no vague "intuitive eating" messaging. Every number is grounded in weighed grams, Atwater verification, and raw-to-cooked yield mathematics.
-- **Information Density:** High density, high scannability. Lifters check their protein multiple times a day: remaining protein and calories must be legible in under 1 second of screen glance.
+This is the design contract for MAXIII. Any developer or AI agent building or changing a screen follows it. Tokens live in `src/constants/theme.ts`; never type a hex code inside a screen.
 
 ---
 
-## 2. Color Matrix & Functional Roles
+## 1. Principles
 
-| Token | Hex / Value | Purpose |
+1. **Monochrome with one accent.** Apple Fitness feel: near-black canvas, graphite cards, white and grey type, lots of empty space, one clear action per screen.
+2. **Saffron is rare.** It marks the one thing to tap and the calorie budget. If everything is saffron, nothing is.
+3. **Numbers lead.** Calories left and protein left are readable in under one second.
+4. **Fast logging.** Gym-goers log 4 to 6 times a day. Logging a repeat meal takes two taps or fewer.
+5. **Indian first.** Katori, ladle, phulka, cooked yield and regional-language search are core, not extras.
+6. **Honest.** No fake precision, no medical claims.
+
+---
+
+## 2. Colour Rules
+
+| Role | Token | Hex |
 |---|---|---|
-| `primary` | `#10B981` (Emerald) | Protein hit completion, primary action CTAs, target adherence |
-| `accent` | `#F59E0B` (Saffron Amber) | Yield engine branding, cooking oil calculations, culinary yield ratio |
-| `calories` | `#38BDF8` (Sky Blue) | Energy budget, daily kcal consumed |
-| `protein` | `#10B981` (Emerald) | Protein grams (1st priority for lifters, 2.0g/kg bodyweight) |
-| `carbs` | `#FBBF24` (Gold) | Carbohydrates (rice, phulka, grains) |
-| `fat` | `#FB7185` (Rose Coral) | Lipids, cooking oil in/out, ghee |
-| `fibre` | `#A78BFA` (Amethyst) | Dietary fibre (dal, sabzi, chana husk) |
-| `canvas` | `#0B0F17` | Root background (deep obsidian blue-black) |
-| `surface-1` | `#121822` | Cards, container panels, bottom tab bar |
-| `surface-2` | `#1A2230` | Interactive tiles, form inputs, secondary buttons |
-| `hairline` | `#232D3F` | Hairline borders, table dividers |
+| Background | `background` | `#0A0A0A` |
+| Card | `surface` | `#161616` |
+| Input / chip / ring track | `surface-raised` | `#222222` |
+| Divider | `border` | `#2E2E2E` |
+| Main button, active tab, calories | `primary` | `#FF8A1F` |
+| Main text | `text` | `#F2F2F2` |
+| Secondary text | `text-muted` | `#9A9A9A` |
+| Units, captions | `text-faint` | `#858585` |
+| Over target, error | `danger` | `#FF6B6B` |
+
+**Only two colours exist in the app:** saffron and danger red. Everything else is a grey.
+
+**Data shades (fixed and non-negotiable):**
+
+| Metric | Hex | Note |
+|---|---|---|
+| Calories | `#FF8A1F` | The one saffron data mark |
+| Protein | `#FFFFFF` | Brightest, because it matters most |
+| Carbs | `#BDBDBD` | |
+| Fats | `#959595` | |
+| Fibre | `#707070` | |
+
+Rules:
+- Data shades appear only on rings, bars and small macro marks. Never on buttons or backgrounds.
+- Pure white is reserved for protein. Body text uses `#F2F2F2`. Never use pure `#000000` anywhere.
+- Text on saffron is always `#0A0A0A`.
+- "Target reached" is shown with a filled ring and a check icon, not a new colour.
+- Macro order is always **Protein, Carbs, Fats, Fibre**.
+
+### Telling macros apart without colour
+Shade alone is not enough, so every macro mark follows these rules:
+- **Always labelled.** Each ring, bar or number sits next to its name or letter (`Protein` or `P`, `Carbs` or `C`, `Fats` or `F`, `Fibre` or `Fi`).
+- **Position is fixed.** Same order, same place, on every screen, so users learn it by position.
+- **Show grams as numbers**, not only as graphics.
+- **No stacked multi-macro charts.** In charts, draw one bar per macro with a label, or show one macro at a time. If a stacked bar is unavoidable, add 2 px gaps between segments and a letter legend.
+- **Check at small size.** Rings under 48 px keep a letter inside or beside them.
 
 ---
 
-## 3. Typography & Numerical Precision
+## 3. Typography
 
-- **Font Family:** System grotesque (`-apple-system`, `Roboto`, `Inter`).
-- **Numbers are First-Class Citizens:**
-  - Macro numbers are always rendered bold (`800` or `900` weight).
-  - Secondary units (`g`, `kcal`) are rendered in `ink-tertiary` (`#64748B`) to reduce visual noise while maintaining clarity.
-  - Rounding rule: **Display numbers round to 1 decimal place** (`roundNutrients(n, 1)`). Raw database storage retains exact floating points.
-- **Regional Script Harmony:**
-  - Regional translations (தமிழ், हिंदी, తెలుగు) must render at slightly larger line heights (+2px) to prevent vertical clipping of diacritics and ligatures.
-
----
-
-## 4. Household Measure System (Indian Portions)
-
-Western calorie apps force users to guess in "cups" or "servings". MAXIII uses standardized Indian household measurements, backed by stored gram weights:
-
-1. **Grams (`g`) First:** Exact digital scale weight is the primary gold standard.
-2. **Katori:**
-   - Standard Katori: `150g` cooked dal/curry.
-   - Small Katori: `100g` cooked dish.
-   - Big Bowl / Serving Katori: `220g` cooked dish.
-3. **Phulka / Roti:**
-   - Medium dry puffed Phulka (no ghee): `30g` (atta dough ~25g).
-   - Large tawa roti: `45g`.
-4. **Ladle (`Karandi`):**
-   - Deep curry ladle: `75g - 80g`.
-5. **Scoop:**
-   - Protein powder scoop: `30g - 33g`.
+- **Font:** system font (SF Pro on iOS, Roboto on Android). No custom fonts in v1.
+- Large bold titles, small muted captions. Weights stay between 400 and 700.
+- **Numbers:** bold, tabular figures (`fontVariant: ['tabular-nums']`) so values don't jump when they change.
+- Units (`g`, `kcal`) use `text-faint` and a smaller size.
+- **Rounding:** display numbers round to 1 decimal place. Database values keep full precision.
+- **Regional scripts** (தமிழ், हिंदी, తెలుగు): add +2px line height so diacritics don't clip.
 
 ---
 
-## 5. The Yield Engine UI Contract
+## 4. Layout and Components
 
-The Yield Engine is MAXIII's core competitive advantage. When building or modifying the Yield screen:
+- Cards are `surface` on `background`, 20px corners, **no border and no shadow**.
+- Borders appear only on inputs and dividers.
+- Screen padding is 16px. Spacing between cards is 16px.
+- One full-width primary button per screen at most.
+- Dark mode only in v1. A light theme can be added later by swapping the tokens.
+- Tabs (default set, change if the product changes): **Today, Coach, Gear, Profile**.
 
-- **Flow:**
-  $$\text{Raw Weighed Ingredients} + (\text{Oil Added} - \text{Oil Left in Pan}) \xrightarrow{\text{Cooking}} \text{Cooked Pot Weight}$$
-- **Key Display Metrics:**
-  - **Yield Ratio:** e.g., `3.5x` (when water is absorbed, e.g., dal) or `0.75x` (when water evaporates, e.g., roasted meats).
-  - **Energy Density:** Always displayed prominently in `kcal / gram` (e.g., `1.21 kcal/g`).
-  - **Atwater Consistency Check:** Display Atwater calculation check ($\pm 5\%$ tolerance). Flag anomalous inputs to the user.
-- **Direct Save Affordance:** Every calculated recipe must have an instant `Save to Food Database` button so it can be logged in future meals with zero recalculation.
+### Today (home)
+1. Greeting and date, large title.
+2. **Calorie card:** big saffron ring with calories left in the centre (`number-hero`).
+3. **Protein line** directly under the ring: `25 g to go` in white, with a `P` mark. Protein is the lifter's priority metric.
+4. **Macro grid (2 x 2):** Protein, Carbs, Fats, Fibre. Each tile has its name, a small ring in its shade, grams eaten and grams target.
+5. **Meals list:** Breakfast, Lunch, Snacks, Dinner, with a `+` row for each.
+6. Quick actions: `Search & Log`, `Copy Yesterday`, `Quick Entry`.
+
+### Food row
+Name, portion (`1 katori`), kcal on the right, `P / C / F` values underneath in `text-muted`, and a small source badge. All macros are visible without opening the row.
+
+### Add Food
+Portion stepper with Indian units, a **Raw / Cooked** toggle, a live macro grid, and one `Add to Diary` button at the bottom (thumb zone).
+
+### Source badges
+Neutral pill (`surface-raised`, `text-muted`) with one of: `Cooked Yield`, `USDA`, `Label`. The `Cooked Yield` badge uses `primary-muted` background and `primary` text because it is MAXIII's signature feature.
 
 ---
 
-## 6. Do's and Don'ts
+## 5. Household Measures (Indian Portions)
+
+Grams are always available as the precise option. Household units map to stored gram weights:
+
+| Unit | Weight |
+|---|---|
+| Standard katori (cooked dal or curry) | 150 g |
+| Small katori | 100 g |
+| Big bowl / serving katori | 220 g |
+| Medium phulka (no ghee) | 30 g (about 25 g atta dough) |
+| Large tawa roti | 45 g |
+| Curry ladle (karandi) | 75 to 80 g |
+| Protein powder scoop | 30 to 33 g |
+
+---
+
+## 6. Yield Engine Contract
+
+```
+Raw weighed ingredients + (oil added - oil left in pan)
+        -> cooking ->
+Cooked pot weight
+```
+
+Always show:
+- **Yield ratio**, e.g. `3.5x` for dal (absorbs water) or `0.75x` for roasted meat (loses water).
+- **Energy density** in `kcal / g`, e.g. `1.21 kcal/g`.
+- **Atwater check** with a 5% tolerance. Flag inputs that don't add up, using `danger` red.
+- A **Save to Food Database** button, so the recipe can be logged later with no recalculation.
+
+Result panel: `surface` card, saffron for the key result, greys for everything else.
+
+---
+
+## 7. Motion and Feel
+
+- Rings animate in with a short ease-out (about 600 ms) on first load and when a value changes.
+- Light haptic on `Add to Diary` and when a ring reaches 100%.
+- Screen transitions use the platform default. No decorative animation.
+
+---
+
+## 8. Do and Don't
 
 ### Do
-- **Do prioritize Protein visibility:** Protein is the lifter's primary metric. Give it prime placement on dashboard cards with remaining grams (`"25g to target"`).
-- **Do display Data Source tags:** Every food item must visually show its source (`USDA`, `Cooked Yield`, `Label`).
-- **Do provide one-tap fast actions:** Gym-goers log 4–6 times daily; provide `Quick Entry`, `Search & Log`, and `Copy Yesterday`.
-- **Do enforce health safety floors:** Show a clear calorie floor notice ($\ge 1,600 \text{ kcal}$ minimum for males, $\ge 1,200 \text{ kcal}$ for females) and a disclaimer: *"Calculation accuracy when ingredients are weighed. Not medical advice."*
-- **Do respect touch target sizes:** All buttons, pills, and touchable rows must hold $\ge 44\text{px}$ minimum tap targets.
+- Give protein prime placement with remaining grams.
+- Label every macro mark with its name or letter.
+- Show the data source on every food item.
+- Keep all touch targets at 44 px or larger.
+- Show the calorie floor (1,600 kcal minimum for males, 1,200 kcal for females) and this disclaimer: *"Accuracy depends on weighing ingredients. Not medical advice."*
+- Keep logging actions in the bottom 60% of the screen.
 
 ### Don't
-- **Don't claim fake precision:** Never use marketing claims like *"97% accurate"*. Use *"Calculation accuracy when ingredients are weighed"*.
-- **Don't use pure `#000000` black for cards:** Use `#121822` and `#1A2230` to preserve depth and elevation contrast.
-- **Don't hide nutrition numbers in deep menus:** Macros (P, C, F, Kcal) must be visible on the card row without requiring extra taps.
-- **Don't bundle IFCT data:** ICMR-NIN IFCT 2017 data is copyrighted and must not be distributed until commercial licensing is secured.
+- Don't claim fake precision, such as "97% accurate".
+- Don't add colours. The app has saffron, danger red and greys only.
+- Don't use saffron for decoration or on more than one primary element per area.
+- Don't rely on shade alone to identify a macro.
+- Don't hide macros in deep menus.
+- Don't use stock food photos, gradients or wellness slogans.
+- Don't bundle ICMR-NIN IFCT 2017 data until a commercial licence is secured.
 
 ---
 
-## 7. Responsive Behavior & Mobile Ergonomics
+## 9. Responsive Behaviour
 
-| Viewport | Width | Layout Adjustments |
+| Viewport | Width | Layout |
 |---|---|---|
-| Compact Mobile | $\le 380\text{px}$ | Macro grid drops to 2-column compact; bottom tabs use icon + compact label |
-| Standard Mobile | $390\text{px} - 430\text{px}$ | Standard 2x2 macro cards, full meal lists, 4-tab bottom navigation |
-| Tablet / Foldable | $\ge 600\text{px}$ | Content clamped to `max-width: 720px` centered for single-hand readability |
+| Compact | up to 380 px | Macro grid stays 2 x 2 with smaller rings; tab labels are compact |
+| Standard | 390 to 430 px | Default layout |
+| Tablet / foldable | 600 px and up | Content centred, `max-width: 720px` |
 
-### Thumb-Zone Ergonomics
-- Frequently tapped actions (`+ Log Food`, `Save Recipe`, `Portion Selector`) are positioned in the bottom 60% of the screen.
-- Bottom tab navigation holds a `64px` height with `8px` bottom inset for iOS Home Indicator and Android gesture bars.
+Tab bar is 64 px high plus the safe-area inset for the iOS home indicator and Android gesture bar.
 
 ---
 
-## 8. Agent Implementation Checklist
+## 10. Agent Checklist
 
-When adding or altering any component in MAXIII, verify:
+Before finishing any screen, verify:
 
-1. [ ] Colors use defined tokens from `src/constants/theme.ts`.
-2. [ ] Macro ordering follows standard lifter convention: **Protein** first, then **Carbs**, **Fats**, and **Fibre**.
-3. [ ] All numerical calculations pass Jest unit tests (`npm test`).
-4. [ ] TypeScript strict mode compiles without errors (`npx tsc --noEmit`).
-5. [ ] DPDP Act compliance and "Not medical advice" notices remain intact.
+1. [ ] Colours come from `src/constants/theme.ts`, with no raw hex values in components.
+2. [ ] Only saffron, danger red and greys are used.
+3. [ ] Macro order is Protein, Carbs, Fats, Fibre, and each mark has a label.
+4. [ ] Saffron is used only for the primary action, the active tab and calories.
+5. [ ] Every touch target is at least 44 px.
+6. [ ] Numbers use tabular figures and round to 1 decimal place.
+7. [ ] Regional-language text isn't clipped.
+8. [ ] The disclaimer and calorie floor are intact.
+9. [ ] `npx tsc --noEmit` and `npm test` pass.

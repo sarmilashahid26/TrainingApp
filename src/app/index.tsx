@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,15 @@ import {
 import { useRouter } from 'expo-router';
 import { Colors, Spacing, Radius } from '@/constants/theme';
 import { useNutrition } from '@/context/NutritionContext';
-import { LoggedFoodItem } from '@/data/placeholderFoods';
+import { ProgressRing } from '@/components/ProgressRing';
+import { FoodItem, FoodPortion, applyOilModifier } from '@/data/placeholderFoods';
 
 const theme = Colors.dark;
 
 export default function TodayScreen() {
   const router = useRouter();
   const {
+    foods,
     logs,
     activeDayType,
     setActiveDayType,
@@ -29,20 +31,74 @@ export default function TodayScreen() {
     removeLog,
     copyYesterday,
     addLog,
+    currentTrendWeight,
+    userCalibrations,
   } = useNutrition();
 
+  const [selectedFoodForPortion, setSelectedFoodForPortion] = useState<FoodItem | null>(null);
+  const [portionSelection, setPortionSelection] = useState<FoodPortion | null>(null);
+  const [portionGrams, setPortionGrams] = useState<string>('150');
+  const [portionMeal, setPortionMeal] = useState<'breakfast' | 'lunch' | 'snack' | 'dinner'>('lunch');
+  const [isCookedMode, setIsCookedMode] = useState<boolean>(true);
+  const [portionOilLevel, setPortionOilLevel] = useState<'normal' | 'medium' | 'high'>('normal');
+
+  // Quick Add modal
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [quickMeal, setQuickMeal] = useState<'breakfast' | 'lunch' | 'snack' | 'dinner'>('snack');
   const [quickName, setQuickName] = useState('');
   const [quickKcal, setQuickKcal] = useState('');
   const [quickProtein, setQuickProtein] = useState('');
 
-  const mealTypes: Array<{ key: 'breakfast' | 'lunch' | 'snack' | 'dinner'; title: string; icon: string }> = [
-    { key: 'breakfast', title: 'Breakfast', icon: '🌅' },
-    { key: 'lunch', title: 'Lunch', icon: '☀️' },
-    { key: 'snack', title: 'Evening / Pre-Workout', icon: '⚡' },
-    { key: 'dinner', title: 'Dinner', icon: '🌙' },
+  const mealTypes: Array<{ key: 'breakfast' | 'lunch' | 'snack' | 'dinner'; title: string }> = [
+    { key: 'breakfast', title: 'Breakfast' },
+    { key: 'lunch', title: 'Lunch' },
+    { key: 'snack', title: 'Snacks' },
+    { key: 'dinner', title: 'Dinner' },
   ];
+
+  const handleOpenPortionModal = (food: FoodItem, targetMealType?: 'breakfast' | 'lunch' | 'snack' | 'dinner') => {
+    setSelectedFoodForPortion(food);
+    const defPortion = food.portions[food.defaultPortionIndex] || food.portions[0];
+    setPortionSelection(defPortion);
+    setPortionGrams(defPortion.grams.toString());
+    if (targetMealType) setPortionMeal(targetMealType);
+    setIsCookedMode(food.source === 'own_measurement' || food.name.toLowerCase().includes('cooked'));
+    setPortionOilLevel('normal');
+  };
+
+  const handleConfirmPortionLog = () => {
+    if (!selectedFoodForPortion || !portionSelection) return;
+    const grams = parseFloat(portionGrams) || 100;
+    const factor = grams / 100;
+    const round1 = (n: number) => Math.round(n * 10) / 10;
+    const base = {
+      kcal: Math.round(selectedFoodForPortion.per100g.kcal * factor),
+      protein: round1(selectedFoodForPortion.per100g.protein * factor),
+      carbs: round1(selectedFoodForPortion.per100g.carbs * factor),
+      fat: round1(selectedFoodForPortion.per100g.fat * factor),
+      fiber: round1(selectedFoodForPortion.per100g.fiber * factor),
+    };
+    const finalNutrition = applyOilModifier(base, portionOilLevel);
+    const oilSuffix = portionOilLevel === 'medium' ? ' (+5g tadka)' : portionOilLevel === 'high' ? ' (+10g oil)' : '';
+
+    addLog({
+      foodId: selectedFoodForPortion.id,
+      name: `${selectedFoodForPortion.name}${isCookedMode ? ' (Cooked)' : ' (Raw)'}${oilSuffix}`,
+      mealType: portionMeal,
+      portionLabel: `${portionSelection.label} (${grams}g)`,
+      grams,
+      kcal: finalNutrition.kcal,
+      protein: finalNutrition.protein,
+      carbs: finalNutrition.carbs,
+      fat: finalNutrition.fat,
+      fiber: finalNutrition.fiber,
+      source: selectedFoodForPortion.source,
+      oilLevel: portionOilLevel,
+      confidence: selectedFoodForPortion.confidence ?? 0.9,
+    });
+
+    setSelectedFoodForPortion(null);
+  };
 
   const handleQuickAdd = () => {
     const kcalNum = parseFloat(quickKcal);
@@ -70,63 +126,59 @@ export default function TodayScreen() {
     setQuickAddVisible(false);
   };
 
-  const calorieProgress = Math.min(1, totals.kcal / activeTarget.kcal);
+  const calorieProgress = activeTarget.kcal > 0 ? totals.kcal / activeTarget.kcal : 0;
+  const proteinProgress = activeTarget.protein > 0 ? totals.protein / activeTarget.protein : 0;
+  const carbsProgress = activeTarget.carbs > 0 ? totals.carbs / activeTarget.carbs : 0;
+  const fatProgress = activeTarget.fat > 0 ? totals.fat / activeTarget.fat : 0;
+  const fiberProgress = activeTarget.fiber > 0 ? totals.fiber / activeTarget.fiber : 0;
+
+  const proteinToGo = Math.max(0, Math.round((activeTarget.protein - totals.protein) * 10) / 10);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Top Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <View style={styles.logoRow}>
-              <Text style={styles.brandTitle}>MAXIII</Text>
-              <View style={styles.betaBadge}>
-                <Text style={styles.betaText}>YIELD ENGINE</Text>
-              </View>
+        <View style={styles.header}>
+          <View style={styles.headerRow}>
+            <Text style={styles.largeTitle}>Today</Text>
+            <View style={styles.streakPill}>
+              <Text style={styles.streakText}>{streakDays}-day streak</Text>
             </View>
-            <Text style={styles.dateSubtitle}>Saturday, 10 Oct • Today</Text>
-          </View>
-          <View style={styles.streakBadge}>
-            <Text style={styles.streakText}>🔥 {streakDays}-day streak</Text>
           </View>
         </View>
 
-        {/* Day Target Switcher (Training vs Rest) */}
-        <View style={styles.daySwitchContainer}>
-          <TouchableOpacity
-            style={[styles.daySwitchBtn, activeDayType === 'training' && styles.daySwitchBtnActive]}
-            onPress={() => setActiveDayType('training')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.daySwitchText, activeDayType === 'training' && styles.daySwitchTextActive]}>
-              🏋️ Training Day (2,150 kcal)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.daySwitchBtn, activeDayType === 'rest' && styles.daySwitchBtnActive]}
-            onPress={() => setActiveDayType('rest')}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.daySwitchText, activeDayType === 'rest' && styles.daySwitchTextActive]}>
-              🧘 Rest Day (1,850 kcal)
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Daily Calorie Summary Card */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryHeader}>
-            <Text style={styles.summaryTitle}>Daily Energy Budget</Text>
-            <Text style={styles.summaryRemainingText}>
-              <Text style={styles.summaryRemainingNum}>{totals.remainingKcal}</Text> kcal left
-            </Text>
+        {/* 2. Calorie Hero Card: Big Saffron Ring with calories in centre */}
+        <View style={styles.calorieCard}>
+          <View style={styles.ringWrapper}>
+            <ProgressRing
+              size={180}
+              strokeWidth={14}
+              progress={calorieProgress}
+              color={theme.calories}
+              trackColor={theme.ringTrack}
+              backgroundColor={theme.surface}
+            >
+              {totals.kcal > activeTarget.kcal ? (
+                <View style={styles.ringContent}>
+                  <Text style={[styles.numberHero, { color: theme.text }]}>
+                    +{totals.kcal - activeTarget.kcal}
+                  </Text>
+                  <Text style={styles.ringUnit}>kcal over · adaptive logged</Text>
+                </View>
+              ) : (
+                <View style={styles.ringContent}>
+                  <Text style={styles.numberHero}>{totals.remainingKcal}</Text>
+                  <Text style={styles.ringUnit}>kcal left</Text>
+                </View>
+              )}
+            </ProgressRing>
           </View>
 
-          {/* Progress Bar */}
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${calorieProgress * 100}%` }]} />
-          </View>
-
+          {/* Three-Column Budget Numbers */}
           <View style={styles.budgetRow}>
             <View style={styles.budgetItem}>
               <Text style={styles.budgetLabel}>Target</Text>
@@ -135,144 +187,127 @@ export default function TodayScreen() {
             <View style={styles.budgetDivider} />
             <View style={styles.budgetItem}>
               <Text style={styles.budgetLabel}>Eaten</Text>
-              <Text style={[styles.budgetValue, { color: theme.calories }]}>{totals.kcal}</Text>
+              <Text style={styles.budgetValue}>{totals.kcal}</Text>
             </View>
             <View style={styles.budgetDivider} />
             <View style={styles.budgetItem}>
               <Text style={styles.budgetLabel}>Remaining</Text>
-              <Text style={[styles.budgetValue, { color: theme.primary }]}>{totals.remainingKcal}</Text>
+              <Text style={[styles.budgetValue, { color: theme.calories }]}>
+                {totals.remainingKcal}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Macro Nutrient Cards */}
-        <View style={styles.macrosGrid}>
-          {/* Protein Card (Primary for lifters) */}
-          <View style={[styles.macroCard, styles.proteinHighlightCard]}>
-            <View style={styles.macroCardHeader}>
-              <Text style={styles.macroName}>PROTEIN</Text>
-              <Text style={[styles.macroPercent, { color: theme.protein }]}>{totals.proteinPercent}%</Text>
+        {/* 3. Macro Grid (2 x 2): Strictly Protein, Carbs, Fats, Fibre (Clean, Uncluttered) */}
+        <View style={styles.macroGrid}>
+          {/* Tile 1: Protein (Brightest White #FFFFFF, Lifter Priority #1) */}
+          <View style={styles.macroTile}>
+            <View style={styles.macroTileTop}>
+              <Text style={[styles.macroLabel, { color: theme.protein }]}>Protein</Text>
+              <ProgressRing
+                size={40}
+                strokeWidth={5}
+                progress={proteinProgress}
+                color={theme.protein}
+                trackColor={theme.ringTrack}
+                backgroundColor={theme.surface}
+              >
+                <Text style={[styles.miniRingLabel, { color: theme.protein }]}>P</Text>
+              </ProgressRing>
             </View>
-            <Text style={styles.macroAmount}>
-              <Text style={[styles.macroAmountBold, { color: theme.protein }]}>{totals.protein}</Text>
-              <Text style={styles.macroGoal}> / {activeTarget.protein}g</Text>
-            </Text>
-            <View style={styles.macroBarBg}>
-              <View
-                style={[
-                  styles.macroBarFill,
-                  { backgroundColor: theme.protein, width: `${Math.min(100, (totals.protein / activeTarget.protein) * 100)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.macroRemainingHint}>
-              {Math.max(0, Math.round(activeTarget.protein - totals.protein))}g to hit target
+            <Text style={styles.macroGramsRow}>
+              <Text style={styles.macroEatenText}>{totals.protein}</Text>
+              <Text style={styles.macroTargetText}> / {activeTarget.protein} g</Text>
             </Text>
           </View>
 
-          {/* Carbs Card */}
-          <View style={styles.macroCard}>
-            <View style={styles.macroCardHeader}>
-              <Text style={styles.macroName}>CARBS</Text>
-              <Text style={[styles.macroPercent, { color: theme.carbs }]}>
-                {Math.min(100, Math.round((totals.carbs / activeTarget.carbs) * 100))}%
-              </Text>
+          {/* Tile 2: Carbs (Shade #BDBDBD) */}
+          <View style={styles.macroTile}>
+            <View style={styles.macroTileTop}>
+              <Text style={[styles.macroLabel, { color: theme.carbs }]}>Carbs</Text>
+              <ProgressRing
+                size={40}
+                strokeWidth={5}
+                progress={carbsProgress}
+                color={theme.carbs}
+                trackColor={theme.ringTrack}
+                backgroundColor={theme.surface}
+              >
+                <Text style={[styles.miniRingLabel, { color: theme.carbs }]}>C</Text>
+              </ProgressRing>
             </View>
-            <Text style={styles.macroAmount}>
-              <Text style={[styles.macroAmountBold, { color: theme.carbs }]}>{totals.carbs}</Text>
-              <Text style={styles.macroGoal}> / {activeTarget.carbs}g</Text>
-            </Text>
-            <View style={styles.macroBarBg}>
-              <View
-                style={[
-                  styles.macroBarFill,
-                  { backgroundColor: theme.carbs, width: `${Math.min(100, (totals.carbs / activeTarget.carbs) * 100)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.macroRemainingHint}>
-              {Math.max(0, Math.round(activeTarget.carbs - totals.carbs))}g left
+            <Text style={styles.macroGramsRow}>
+              <Text style={styles.macroEatenText}>{totals.carbs}</Text>
+              <Text style={styles.macroTargetText}> / {activeTarget.carbs} g</Text>
             </Text>
           </View>
 
-          {/* Fats Card */}
-          <View style={styles.macroCard}>
-            <View style={styles.macroCardHeader}>
-              <Text style={styles.macroName}>FATS</Text>
-              <Text style={[styles.macroPercent, { color: theme.fat }]}>
-                {Math.min(100, Math.round((totals.fat / activeTarget.fat) * 100))}%
-              </Text>
+          {/* Tile 3: Fats (Shade #959595) */}
+          <View style={styles.macroTile}>
+            <View style={styles.macroTileTop}>
+              <Text style={[styles.macroLabel, { color: theme.fats }]}>Fats</Text>
+              <ProgressRing
+                size={40}
+                strokeWidth={5}
+                progress={fatProgress}
+                color={theme.fats}
+                trackColor={theme.ringTrack}
+                backgroundColor={theme.surface}
+              >
+                <Text style={[styles.miniRingLabel, { color: theme.fats }]}>F</Text>
+              </ProgressRing>
             </View>
-            <Text style={styles.macroAmount}>
-              <Text style={[styles.macroAmountBold, { color: theme.fat }]}>{totals.fat}</Text>
-              <Text style={styles.macroGoal}> / {activeTarget.fat}g</Text>
-            </Text>
-            <View style={styles.macroBarBg}>
-              <View
-                style={[
-                  styles.macroBarFill,
-                  { backgroundColor: theme.fat, width: `${Math.min(100, (totals.fat / activeTarget.fat) * 100)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.macroRemainingHint}>
-              {Math.max(0, Math.round(activeTarget.fat - totals.fat))}g left
+            <Text style={styles.macroGramsRow}>
+              <Text style={styles.macroEatenText}>{totals.fat}</Text>
+              <Text style={styles.macroTargetText}> / {activeTarget.fat} g</Text>
             </Text>
           </View>
 
-          {/* Fiber Card */}
-          <View style={styles.macroCard}>
-            <View style={styles.macroCardHeader}>
-              <Text style={styles.macroName}>FIBRE</Text>
-              <Text style={[styles.macroPercent, { color: theme.fiber }]}>
-                {Math.min(100, Math.round((totals.fiber / activeTarget.fiber) * 100))}%
-              </Text>
+          {/* Tile 4: Fibre (Shade #707070) */}
+          <View style={styles.macroTile}>
+            <View style={styles.macroTileTop}>
+              <Text style={[styles.macroLabel, { color: theme.fibre }]}>Fibre</Text>
+              <ProgressRing
+                size={40}
+                strokeWidth={5}
+                progress={fiberProgress}
+                color={theme.fibre}
+                trackColor={theme.ringTrack}
+                backgroundColor={theme.surface}
+              >
+                <Text style={[styles.miniRingLabel, { color: theme.fibre }]}>Fi</Text>
+              </ProgressRing>
             </View>
-            <Text style={styles.macroAmount}>
-              <Text style={[styles.macroAmountBold, { color: theme.fiber }]}>{totals.fiber}</Text>
-              <Text style={styles.macroGoal}> / {activeTarget.fiber}g</Text>
-            </Text>
-            <View style={styles.macroBarBg}>
-              <View
-                style={[
-                  styles.macroBarFill,
-                  { backgroundColor: theme.fiber, width: `${Math.min(100, (totals.fiber / activeTarget.fiber) * 100)}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.macroRemainingHint}>
-              {Math.max(0, Math.round(activeTarget.fiber - totals.fiber))}g left
+            <Text style={styles.macroGramsRow}>
+              <Text style={styles.macroEatenText}>{totals.fiber}</Text>
+              <Text style={styles.macroTargetText}> / {activeTarget.fiber} g</Text>
             </Text>
           </View>
         </View>
 
-        {/* Action Shortcuts */}
+        {/* 4. Quick Actions: Clean, Minimal, No Emojis */}
         <View style={styles.quickActionsRow}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.primaryActionBtn]}
-            onPress={() => router.push('/search')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.primaryActionBtnText}>🔍 Search & Log Food</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.secondaryActionBtn]}
+            style={styles.quickActionBtn}
             onPress={() => setQuickAddVisible(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.secondaryActionBtnText}>⚡ Quick Entry</Text>
+            <Text style={styles.quickActionBtnText}>Quick Entry</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.secondaryActionBtn]}
+            style={styles.quickActionBtn}
             onPress={copyYesterday}
             activeOpacity={0.8}
           >
-            <Text style={styles.secondaryActionBtnText}>📋 Copy Yesterday</Text>
+            <Text style={styles.quickActionBtnText}>Copy Yesterday</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Meals Breakdown */}
-        <Text style={styles.sectionHeading}>Today's Meals</Text>
+        {/* 5. Meals List: Breakfast, Lunch, Snacks, Dinner */}
+        <View style={styles.mealsHeader}>
+          <Text style={styles.mealsHeading}>Meals</Text>
+        </View>
 
         {mealTypes.map((meal) => {
           const mealLogs = logs.filter((l) => l.mealType === meal.key);
@@ -280,56 +315,78 @@ export default function TodayScreen() {
           const mealProtein = Math.round(mealLogs.reduce((acc, curr) => acc + curr.protein, 0) * 10) / 10;
 
           return (
-            <View key={meal.key} style={styles.mealSection}>
+            <View key={meal.key} style={styles.mealSectionCard}>
               <View style={styles.mealSectionHeader}>
-                <View style={styles.mealTitleRow}>
-                  <Text style={styles.mealIcon}>{meal.icon}</Text>
-                  <Text style={styles.mealTitle}>{meal.title}</Text>
-                </View>
-                <View style={styles.mealSummaryRow}>
+                <Text style={styles.mealTitleText}>{meal.title}</Text>
+                <View style={styles.mealStatsRow}>
                   <Text style={styles.mealKcalText}>{mealKcal} kcal</Text>
-                  <Text style={styles.mealProteinText}>• {mealProtein}g P</Text>
+                  {mealProtein > 0 && (
+                    <Text style={styles.mealProteinText}>· {mealProtein}g P</Text>
+                  )}
                   <TouchableOpacity
-                    style={styles.addMealIconBtn}
+                    style={styles.addFoodPlusBtn}
                     onPress={() => router.push('/search')}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.addMealIconText}>+</Text>
+                    <Text style={styles.addFoodPlusText}>+</Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
               {mealLogs.length === 0 ? (
-                <View style={styles.emptyMealBox}>
-                  <Text style={styles.emptyMealText}>No food logged for {meal.title.toLowerCase()} yet.</Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.emptyMealRow}
+                  onPress={() => router.push('/search')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptyMealPrompt}>+ Log food</Text>
+                </TouchableOpacity>
               ) : (
                 mealLogs.map((item) => (
-                  <View key={item.id} style={styles.foodItemRow}>
-                    <View style={styles.foodInfoCol}>
-                      <View style={styles.foodTitleRow}>
-                        <Text style={styles.foodName}>{item.name}</Text>
-                        <View style={[styles.sourceTag, item.source === 'own_measurement' ? styles.sourceYield : styles.sourceUsda]}>
-                          <Text style={styles.sourceTagText}>
+                  <View key={item.id} style={styles.foodRow}>
+                    <View style={styles.foodRowLeft}>
+                      <View style={styles.foodNameAndBadge}>
+                        <Text style={styles.foodRowName}>{item.name}</Text>
+                        <View
+                          style={[
+                            styles.sourceBadge,
+                            item.source === 'own_measurement' && styles.sourceBadgeYield,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.sourceBadgeText,
+                              item.source === 'own_measurement' && styles.sourceBadgeYieldText,
+                            ]}
+                          >
                             {item.source === 'own_measurement' ? 'Cooked Yield' : item.source.toUpperCase()}
                           </Text>
                         </View>
+                        {item.confidence ? (
+                          <View style={styles.confidencePill}>
+                            <Text style={styles.confidencePillText}>
+                              {Math.round(item.confidence * 100)}%
+                            </Text>
+                          </View>
+                        ) : null}
                       </View>
-                      <Text style={styles.portionLabel}>{item.portionLabel}</Text>
-                      <Text style={styles.foodMacros}>
-                        <Text style={{ color: theme.calories }}>{item.kcal} kcal</Text>
-                        {'  '}P: <Text style={{ color: theme.protein }}>{item.protein}g</Text>
-                        {'  '}C: <Text style={{ color: theme.carbs }}>{item.carbs}g</Text>
-                        {'  '}F: <Text style={{ color: theme.fat }}>{item.fat}g</Text>
+                      <Text style={styles.portionText}>{item.portionLabel}</Text>
+                      {/* P / C / F in text-muted per DESIGN.md */}
+                      <Text style={styles.macroBreakdownText}>
+                        P {item.protein}g · C {item.carbs}g · F {item.fat}g
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => removeLog(item.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Text style={styles.removeBtnText}>✕</Text>
-                    </TouchableOpacity>
+                    <View style={styles.foodRowRight}>
+                      <Text style={styles.foodRowKcal}>{item.kcal} kcal</Text>
+                      <TouchableOpacity
+                        style={styles.removeLogBtn}
+                        onPress={() => removeLog(item.id)}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      >
+                        <Text style={styles.removeLogIcon}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))
               )}
@@ -337,21 +394,210 @@ export default function TodayScreen() {
           );
         })}
 
-        {/* Health Disclaimer Banner */}
-        <View style={styles.disclaimerBox}>
-          <Text style={styles.disclaimerTitle}>⚖️ Calculation Accuracy & Health Notice</Text>
+        {/* 6. Health & Calorie Floor Disclaimer */}
+        <View style={styles.disclaimerCard}>
           <Text style={styles.disclaimerText}>
-            Nutrition values represent calculation accuracy when raw and cooked ingredients are weighed. Daily calorie floor is maintained at 1,600 kcal minimum for safe metabolic health. Not medical advice.
+            Accuracy depends on weighing ingredients. Not medical advice.
+          </Text>
+          <Text style={styles.calorieFloorNote}>
+            Calorie floors: minimum 1,600 kcal (males) / 1,200 kcal (females) for metabolic safety.
           </Text>
         </View>
       </ScrollView>
 
+      {/* Direct Portion Modal (Triggered from Top Search or Food Row) */}
+      <Modal visible={selectedFoodForPortion !== null} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            {selectedFoodForPortion && (
+              <>
+                <View style={styles.sheetHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sheetFoodName}>{selectedFoodForPortion.name}</Text>
+                    <Text style={styles.sheetSubtitle}>
+                      {selectedFoodForPortion.category} · Source: {selectedFoodForPortion.source}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSelectedFoodForPortion(null)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  >
+                    <Text style={styles.closeSheetText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Raw vs Cooked Toggle */}
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, !isCookedMode && styles.toggleBtnActive]}
+                    onPress={() => setIsCookedMode(false)}
+                  >
+                    <Text style={[styles.toggleBtnText, !isCookedMode && styles.toggleBtnTextActive]}>
+                      Raw
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleBtn, isCookedMode && styles.toggleBtnActive]}
+                    onPress={() => setIsCookedMode(true)}
+                  >
+                    <Text style={[styles.toggleBtnText, isCookedMode && styles.toggleBtnTextActive]}>
+                      Cooked
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Oil Slider for Dishes with Tempering/Gravy */}
+                {selectedFoodForPortion.supportsOilSlider && (
+                  <View style={styles.oilSliderContainer}>
+                    <Text style={styles.sectionLabel}>Tadka & Cooking Oil Level</Text>
+                    <View style={styles.oilPillsRow}>
+                      {[
+                        { id: 'normal', label: 'Low / Normal (+0g)' },
+                        { id: 'medium', label: 'Medium (+5g oil)' },
+                        { id: 'high', label: 'Restaurant (+10g oil)' },
+                      ].map((lvl) => (
+                        <TouchableOpacity
+                          key={lvl.id}
+                          style={[styles.oilPill, portionOilLevel === lvl.id && styles.oilPillActive]}
+                          onPress={() => setPortionOilLevel(lvl.id as 'normal' | 'medium' | 'high')}
+                        >
+                          <Text style={[styles.oilPillText, portionOilLevel === lvl.id && styles.oilPillTextActive]}>
+                            {lvl.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Target Meal Selector */}
+                <Text style={styles.sectionLabel}>Meal</Text>
+                <View style={styles.mealPillsRow}>
+                  {(['breakfast', 'lunch', 'snack', 'dinner'] as const).map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.mealPill, portionMeal === m && styles.mealPillActive]}
+                      onPress={() => setPortionMeal(m)}
+                    >
+                      <Text style={[styles.mealPillText, portionMeal === m && styles.mealPillTextActive]}>
+                        {m === 'snack' ? 'Snacks' : m.charAt(0).toUpperCase() + m.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Indian Household Portions & Calibrations */}
+                <Text style={styles.sectionLabel}>Portion</Text>
+                <View style={styles.portionsGrid}>
+                  {selectedFoodForPortion.supportsKatori && (
+                    <TouchableOpacity
+                      style={[
+                        styles.portionBtn,
+                        styles.calibratedPortionBtn,
+                        portionGrams === userCalibrations.katoriGrams.toString() && styles.portionBtnActive,
+                      ]}
+                      onPress={() => {
+                        setPortionSelection({
+                          name: 'my_katori',
+                          label: `My Katori (${userCalibrations.katoriGrams}g)`,
+                          grams: userCalibrations.katoriGrams,
+                        });
+                        setPortionGrams(userCalibrations.katoriGrams.toString());
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.portionBtnText,
+                          styles.calibratedPortionBtnText,
+                          portionGrams === userCalibrations.katoriGrams.toString() && styles.portionBtnTextActive,
+                        ]}
+                      >
+                        ⭐ My Katori ({userCalibrations.katoriGrams}g)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedFoodForPortion.supportsPhulka && (
+                    <TouchableOpacity
+                      style={[
+                        styles.portionBtn,
+                        styles.calibratedPortionBtn,
+                        portionGrams === userCalibrations.rotiGrams.toString() && styles.portionBtnActive,
+                      ]}
+                      onPress={() => {
+                        setPortionSelection({
+                          name: 'my_phulka',
+                          label: `My Phulka (${userCalibrations.rotiGrams}g)`,
+                          grams: userCalibrations.rotiGrams,
+                        });
+                        setPortionGrams(userCalibrations.rotiGrams.toString());
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.portionBtnText,
+                          styles.calibratedPortionBtnText,
+                          portionGrams === userCalibrations.rotiGrams.toString() && styles.portionBtnTextActive,
+                        ]}
+                      >
+                        ⭐ My Phulka ({userCalibrations.rotiGrams}g)
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {selectedFoodForPortion.portions.map((portion, idx) => {
+                    const isSelected = portionSelection?.label === portion.label;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={[styles.portionBtn, isSelected && styles.portionBtnActive]}
+                        onPress={() => {
+                          setPortionSelection(portion);
+                          setPortionGrams(portion.grams.toString());
+                        }}
+                      >
+                        <Text style={[styles.portionBtnText, isSelected && styles.portionBtnTextActive]}>
+                          {portion.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Weight Input */}
+                <Text style={styles.sectionLabel}>Weight (grams)</Text>
+                <View style={styles.weightInputRow}>
+                  <TextInput
+                    style={styles.weightInput}
+                    keyboardType="numeric"
+                    value={portionGrams}
+                    onChangeText={setPortionGrams}
+                  />
+                  <Text style={styles.weightUnit}>g</Text>
+                </View>
+
+                {/* Single Primary Action: Add to Diary (Saffron) */}
+                <TouchableOpacity
+                  style={styles.primaryActionButton}
+                  onPress={handleConfirmPortionLog}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.primaryActionButtonText}>
+                    Add to Diary · {portionMeal.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Quick Add Modal */}
       <Modal visible={quickAddVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>⚡ Quick Calorie & Protein Entry</Text>
-            <Text style={styles.modalSubtitle}>Fast logging when you already know the macros</Text>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Quick Entry</Text>
+            <Text style={styles.modalSubtitle}>Fast logging when macros are already known</Text>
 
             <Text style={styles.inputLabel}>Meal</Text>
             <View style={styles.modalMealPicker}>
@@ -362,28 +608,28 @@ export default function TodayScreen() {
                   onPress={() => setQuickMeal(m)}
                 >
                   <Text style={[styles.modalMealPillText, quickMeal === m && styles.modalMealPillTextActive]}>
-                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                    {m === 'snack' ? 'Snacks' : m.charAt(0).toUpperCase() + m.slice(1)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.inputLabel}>Food or Item Name</Text>
+            <Text style={styles.inputLabel}>Item Name</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. Protein shake with almond milk"
-              placeholderTextColor={theme.textTertiary}
+              placeholder="e.g. Protein shake"
+              placeholderTextColor={theme.textFaint}
               value={quickName}
               onChangeText={setQuickName}
             />
 
             <View style={styles.modalInputRow}>
-              <View style={{ flex: 1, marginRight: Spacing.two }}>
+              <View style={{ flex: 1, marginRight: Spacing.sm }}>
                 <Text style={styles.inputLabel}>Calories (kcal)</Text>
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="e.g. 250"
-                  placeholderTextColor={theme.textTertiary}
+                  placeholder="e.g. 130"
+                  placeholderTextColor={theme.textFaint}
                   keyboardType="numeric"
                   value={quickKcal}
                   onChangeText={setQuickKcal}
@@ -393,8 +639,8 @@ export default function TodayScreen() {
                 <Text style={styles.inputLabel}>Protein (g)</Text>
                 <TextInput
                   style={styles.modalInput}
-                  placeholder="e.g. 24"
-                  placeholderTextColor={theme.textTertiary}
+                  placeholder="e.g. 25"
+                  placeholderTextColor={theme.textFaint}
                   keyboardType="numeric"
                   value={quickProtein}
                   onChangeText={setQuickProtein}
@@ -413,7 +659,7 @@ export default function TodayScreen() {
                 style={styles.modalSubmitBtn}
                 onPress={handleQuickAdd}
               >
-                <Text style={styles.modalSubmitText}>Add to Log</Text>
+                <Text style={styles.modalSubmitText}>Add to Diary</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -432,495 +678,759 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.six + 40,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl + 40,
+  },
+  header: {
+    marginBottom: Spacing.md,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.three,
   },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  brandTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: theme.text,
-    letterSpacing: -0.5,
-  },
-  betaBadge: {
-    backgroundColor: theme.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  betaText: {
-    color: theme.primary,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  dateSubtitle: {
-    fontSize: 13,
-    color: theme.textSecondary,
-    marginTop: 2,
-  },
-  streakBadge: {
-    backgroundColor: theme.surfaceElevated,
+  streakPill: {
+    backgroundColor: theme.surfaceRaised,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: theme.border,
   },
   streakText: {
     color: theme.text,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
-  daySwitchContainer: {
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: theme.text,
+    letterSpacing: -0.4,
+    lineHeight: 40,
+  },
+  // Top Search Bar on Home Screen
+  topSearchWrapper: {
+    marginBottom: Spacing.sm,
+  },
+  searchBar: {
     flexDirection: 'row',
-    backgroundColor: theme.surfaceElevated,
+    alignItems: 'center',
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    padding: 3,
-    marginBottom: Spacing.three,
+    paddingHorizontal: 12,
+    height: 38,
     borderWidth: 1,
     borderColor: theme.border,
+  },
+  searchIconText: {
+    fontSize: 14,
+    color: theme.textFaint,
+    marginRight: 6,
+    fontWeight: '600',
+  },
+  searchInput: {
+    flex: 1,
+    color: theme.text,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+  clearSearchText: {
+    color: theme.textFaint,
+    fontSize: 14,
+    paddingHorizontal: 4,
+  },
+  searchResultsBox: {
+    backgroundColor: theme.surface,
+    borderRadius: Radius.md,
+    marginTop: 6,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  noSearchMatchRow: {
+    padding: Spacing.sm,
+    alignItems: 'center',
+  },
+  noSearchMatchText: {
+    fontSize: 13,
+    color: theme.textMuted,
+  },
+  goToFoodsLink: {
+    marginTop: 6,
+    padding: 4,
+  },
+  goToFoodsLinkText: {
+    fontSize: 13,
+    color: theme.primary,
+    fontWeight: '600',
+  },
+  searchResultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  searchResultMeta: {
+    fontSize: 12,
+    color: theme.textMuted,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  searchResultLogPill: {
+    backgroundColor: theme.primaryMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  searchResultLogText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.primary,
+  },
+  // Day Switcher
+  daySwitchContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: 3,
+    marginBottom: Spacing.md,
   },
   daySwitchBtn: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 10,
     alignItems: 'center',
     borderRadius: Radius.sm,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   daySwitchBtnActive: {
-    backgroundColor: theme.primary,
+    backgroundColor: theme.surface,
   },
   daySwitchText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.textMuted,
   },
   daySwitchTextActive: {
-    color: '#000000',
-    fontWeight: '700',
+    color: theme.text,
+    fontWeight: '600',
   },
-  summaryCard: {
+  // Calorie Hero Card (no border, no shadow, surface background)
+  calorieCard: {
     backgroundColor: theme.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.four,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: Spacing.three,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    alignItems: 'center',
   },
-  summaryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: Spacing.two,
+  ringWrapper: {
+    marginVertical: Spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  summaryTitle: {
+  ringContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  numberHero: {
+    fontSize: 44,
+    fontWeight: '700',
+    color: theme.text,
+    letterSpacing: -0.8,
+    fontVariant: ['tabular-nums'],
+  },
+  ringUnit: {
+    fontSize: 13,
+    color: theme.textFaint,
+    fontWeight: '500',
+    marginTop: -2,
+  },
+  proteinPriorityLine: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: theme.surfaceRaised,
+  },
+  proteinPriorityText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  proteinPriorityValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: theme.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  summaryRemainingText: {
-    fontSize: 14,
-    color: theme.textSecondary,
-  },
-  summaryRemainingNum: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: theme.primary,
-  },
-  progressBarBg: {
-    height: 10,
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-    marginVertical: Spacing.two,
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: theme.primary,
-    borderRadius: Radius.pill,
+    color: theme.protein, // Pure white reserved for protein
+    fontVariant: ['tabular-nums'],
   },
   budgetRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginTop: Spacing.two,
+    width: '100%',
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
   },
   budgetItem: {
     alignItems: 'center',
+    flex: 1,
   },
   budgetLabel: {
     fontSize: 12,
-    color: theme.textTertiary,
+    color: theme.textFaint,
     marginBottom: 2,
+    fontWeight: '500',
   },
   budgetValue: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '600',
     color: theme.text,
+    fontVariant: ['tabular-nums'],
   },
   budgetDivider: {
     width: 1,
     height: 24,
     backgroundColor: theme.border,
   },
-  macrosGrid: {
+  // Macro Grid 2 x 2
+  macroGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginBottom: Spacing.three,
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
   },
-  macroCard: {
-    flex: 1,
-    minWidth: '47%',
+  macroTile: {
+    width: '47.5%',
     backgroundColor: theme.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.border,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    justifyContent: 'space-between',
   },
-  proteinHighlightCard: {
-    borderColor: 'rgba(16, 185, 129, 0.4)',
-    backgroundColor: '#0F181B',
-  },
-  macroCardHeader: {
+  macroTileTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: Spacing.sm,
   },
-  macroName: {
+  macroLabelBlock: {
+    flex: 1,
+    marginRight: 6,
+  },
+  macroLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  macroRemainingSub: {
     fontSize: 11,
-    fontWeight: '800',
-    color: theme.textTertiary,
-    letterSpacing: 0.5,
+    color: theme.textFaint,
+    marginTop: 2,
+    fontWeight: '500',
   },
-  macroPercent: {
-    fontSize: 12,
+  miniRingLabel: {
+    fontSize: 11,
     fontWeight: '700',
   },
-  macroAmount: {
+  macroGramsRow: {
     marginTop: 4,
-    marginBottom: 6,
   },
-  macroAmountBold: {
+  macroEatenText: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
+    color: theme.text,
+    fontVariant: ['tabular-nums'],
   },
-  macroGoal: {
+  macroTargetText: {
     fontSize: 13,
-    color: theme.textSecondary,
+    color: theme.textFaint,
+    fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
-  macroBarBg: {
-    height: 6,
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-  },
-  macroBarFill: {
-    height: '100%',
-    borderRadius: Radius.pill,
-  },
-  macroRemainingHint: {
-    fontSize: 11,
-    color: theme.textTertiary,
-    marginTop: 6,
-  },
+  // Quick Actions Row
   quickActionsRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
-    marginBottom: Spacing.four,
+    gap: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
-  actionBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+  quickActionBtn: {
+    flex: 1,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryActionBtn: {
-    flex: 1.3,
-    backgroundColor: theme.primary,
-  },
-  primaryActionBtnText: {
-    color: '#000000',
-    fontWeight: '800',
+  quickActionBtnText: {
+    color: theme.text,
     fontSize: 13,
+    fontWeight: '500',
   },
-  secondaryActionBtn: {
-    flex: 1,
-    backgroundColor: theme.surfaceElevated,
-    borderWidth: 1,
-    borderColor: theme.border,
+  // Meals
+  mealsHeader: {
+    marginBottom: Spacing.sm,
   },
-  secondaryActionBtnText: {
-    color: theme.text,
-    fontSize: 12,
+  mealsHeading: {
+    fontSize: 20,
     fontWeight: '600',
-  },
-  sectionHeading: {
-    fontSize: 17,
-    fontWeight: '800',
     color: theme.text,
-    marginBottom: Spacing.two,
   },
-  mealSection: {
+  mealSectionCard: {
     backgroundColor: theme.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: Spacing.three,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
   },
   mealSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: Spacing.two,
+    paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
-    marginBottom: Spacing.two,
   },
-  mealTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  mealIcon: {
+  mealTitleText: {
     fontSize: 16,
-  },
-  mealTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.text,
-  },
-  mealSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  mealKcalText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.calories,
-  },
-  mealProteinText: {
-    fontSize: 13,
     fontWeight: '600',
-    color: theme.protein,
-  },
-  addMealIconBtn: {
-    backgroundColor: theme.surfaceElevated,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 4,
-  },
-  addMealIconText: {
     color: theme.text,
-    fontSize: 16,
-    lineHeight: 18,
-    fontWeight: '700',
   },
-  emptyMealBox: {
-    paddingVertical: Spacing.two,
-  },
-  emptyMealText: {
-    fontSize: 12,
-    color: theme.textTertiary,
-    fontStyle: 'italic',
-  },
-  foodItemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  foodInfoCol: {
-    flex: 1,
-  },
-  foodTitleRow: {
+  mealStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  foodName: {
+  mealKcalText: {
     fontSize: 14,
     fontWeight: '600',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
+  },
+  mealProteinText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  addFoodPlusBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addFoodPlusText: {
+    color: theme.primary,
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  emptyMealRow: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  emptyMealPrompt: {
+    fontSize: 13,
+    color: theme.textFaint,
+    fontWeight: '500',
+  },
+  foodRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  foodRowLeft: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
+  foodNameAndBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  foodRowName: {
+    fontSize: 15,
+    fontWeight: '500',
     color: theme.text,
   },
-  sourceTag: {
-    paddingHorizontal: 6,
+  sourceBadge: {
+    backgroundColor: theme.surfaceRaised,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: Radius.pill,
   },
-  sourceYield: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+  sourceBadgeYield: {
+    backgroundColor: theme.primaryMuted,
   },
-  sourceUsda: {
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: theme.textMuted,
   },
-  sourceTagText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: theme.text,
+  sourceBadgeYieldText: {
+    color: theme.primary,
   },
-  portionLabel: {
+  portionText: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: theme.textMuted,
     marginTop: 2,
   },
-  foodMacros: {
+  macroBreakdownText: {
     fontSize: 12,
-    color: theme.textTertiary,
-    marginTop: 3,
+    color: theme.textMuted,
+    marginTop: 4,
+    fontWeight: '400',
+    fontVariant: ['tabular-nums'],
   },
-  removeBtn: {
-    padding: 6,
-    marginLeft: 8,
+  foodRowRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
-  removeBtnText: {
-    color: theme.textTertiary,
+  foodRowKcal: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
+  },
+  removeLogBtn: {
+    padding: 8,
+    marginTop: 4,
+  },
+  removeLogIcon: {
+    color: theme.textFaint,
     fontSize: 14,
-    fontWeight: '700',
   },
-  disclaimerBox: {
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.md,
-    padding: Spacing.three,
-    marginTop: Spacing.two,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  disclaimerTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.accent,
-    marginBottom: 4,
+  disclaimerCard: {
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
   },
   disclaimerText: {
-    fontSize: 11,
-    color: theme.textTertiary,
-    lineHeight: 16,
+    fontSize: 12,
+    color: theme.textFaint,
+    textAlign: 'center',
+    lineHeight: 18,
   },
+  calorieFloorNote: {
+    fontSize: 11,
+    color: theme.textFaint,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  // Portion Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: theme.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing.lg,
+    maxHeight: '85%',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.md,
+  },
+  sheetFoodName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  sheetSubtitle: {
+    fontSize: 12,
+    color: theme.textMuted,
+    marginTop: 2,
+  },
+  closeSheetText: {
+    fontSize: 18,
+    color: theme.textFaint,
+    padding: 4,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: 3,
+    marginBottom: Spacing.md,
+  },
+  toggleBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: theme.surface,
+  },
+  toggleBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  toggleBtnTextActive: {
+    color: theme.text,
+    fontWeight: '600',
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.textMuted,
+    marginBottom: 6,
+  },
+  mealPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: Spacing.md,
+  },
+  mealPill: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: Radius.md,
+    backgroundColor: theme.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mealPillActive: {
+    backgroundColor: theme.primaryMuted,
+  },
+  mealPillText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    fontWeight: '500',
+  },
+  mealPillTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
+  },
+  portionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: Spacing.md,
+  },
+  portionBtn: {
+    paddingHorizontal: 12,
+    minHeight: 38,
+    borderRadius: Radius.md,
+    backgroundColor: theme.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  portionBtnActive: {
+    backgroundColor: theme.primaryMuted,
+  },
+  portionBtnText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    fontWeight: '500',
+  },
+  portionBtnTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
+  },
+  weightInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: theme.border,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    marginBottom: Spacing.md,
+  },
+  weightInput: {
+    flex: 1,
+    color: theme.text,
+    fontSize: 16,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  weightUnit: {
+    fontSize: 13,
+    color: theme.textFaint,
+    fontWeight: '500',
+  },
+  primaryActionButton: {
+    backgroundColor: theme.primary,
+    borderRadius: Radius.md,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    marginTop: 4,
+  },
+  primaryActionButtonText: {
+    color: theme.onPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Quick Add Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.three,
+    padding: Spacing.md,
   },
-  modalContent: {
+  modalCard: {
     width: '100%',
     maxWidth: 420,
     backgroundColor: theme.surface,
-    borderRadius: Radius.xl,
-    padding: Spacing.four,
-    borderWidth: 1,
-    borderColor: theme.border,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     color: theme.text,
   },
   modalSubtitle: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    marginBottom: Spacing.three,
+    fontSize: 13,
+    color: theme.textMuted,
     marginTop: 2,
+    marginBottom: Spacing.md,
   },
   inputLabel: {
     fontSize: 12,
-    fontWeight: '700',
-    color: theme.textSecondary,
+    fontWeight: '600',
+    color: theme.textMuted,
     marginBottom: 6,
   },
   modalMealPicker: {
     flexDirection: 'row',
     gap: 6,
-    marginBottom: Spacing.three,
+    marginBottom: Spacing.md,
   },
   modalMealPill: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: Radius.sm,
-    backgroundColor: theme.surfaceElevated,
+    minHeight: 44,
+    borderRadius: Radius.md,
+    backgroundColor: theme.surfaceRaised,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
+    justifyContent: 'center',
   },
   modalMealPillActive: {
-    backgroundColor: theme.primary,
-    borderColor: theme.primary,
+    backgroundColor: theme.primaryMuted,
   },
   modalMealPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.textMuted,
   },
   modalMealPillTextActive: {
-    color: '#000000',
-    fontWeight: '800',
+    color: theme.primary,
+    fontWeight: '600',
   },
   modalInput: {
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.md,
+    backgroundColor: theme.surfaceRaised,
     borderWidth: 1,
     borderColor: theme.border,
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 44,
     color: theme.text,
     fontSize: 14,
-    marginBottom: Spacing.three,
+    marginBottom: Spacing.md,
   },
   modalInputRow: {
     flexDirection: 'row',
   },
   modalActions: {
     flexDirection: 'row',
-    gap: Spacing.two,
-    marginTop: Spacing.two,
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
   },
   modalCancelBtn: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: 44,
     borderRadius: Radius.md,
     alignItems: 'center',
-    backgroundColor: theme.surfaceElevated,
+    justifyContent: 'center',
+    backgroundColor: theme.surfaceRaised,
   },
   modalCancelText: {
-    color: theme.textSecondary,
-    fontWeight: '600',
+    color: theme.textMuted,
     fontSize: 14,
+    fontWeight: '500',
   },
   modalSubmitBtn: {
     flex: 1,
-    paddingVertical: 12,
+    minHeight: 44,
     borderRadius: Radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: theme.primary,
   },
   modalSubmitText: {
-    color: '#000000',
-    fontWeight: '800',
+    color: theme.onPrimary,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  calibratedPortionBtn: {
+    backgroundColor: theme.surfacePressed,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  calibratedPortionBtnText: {
+    color: theme.text,
+  },
+  oilSliderContainer: {
+    marginBottom: Spacing.sm,
+  },
+  oilPillsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  oilPill: {
+    flex: 1,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  oilPillActive: {
+    borderColor: theme.primary,
+    backgroundColor: theme.primaryMuted,
+  },
+  oilPillText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  oilPillTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
+  },
+  confidencePill: {
+    backgroundColor: theme.surfaceRaised,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
+    marginLeft: 4,
+  },
+  confidencePillText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: theme.textFaint,
   },
 });

@@ -91,7 +91,7 @@ export default function RecipeYieldScreen() {
   const atwaterDiffPercent = useMemo(() => {
     if (!yieldResult) return 0;
     const diff = atwaterDifference(yieldResult.totals);
-    return Math.round(diff * 1000) / 10; // e.g. 1.5%
+    return Math.round(diff * 1000) / 10;
   }, [yieldResult]);
 
   const handleAddPreset = (preset: PresetItem) => {
@@ -131,37 +131,40 @@ export default function RecipeYieldScreen() {
   const roundedPer100g = yieldResult ? roundNutrients(yieldResult.per100gCooked, 1) : null;
   const roundedPerGram = yieldResult ? yieldResult.perGramCooked : null;
 
+  const yieldRatio = totalRawGrams > 0 ? (cookedGramsNumber / totalRawGrams).toFixed(2) : '1.0';
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
-        {/* Title Header */}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.badgeRow}>
-            <Text style={styles.badgeText}>MAXIII CORE DIFFERENTIATOR</Text>
-          </View>
-          <Text style={styles.title}>Indian Yield Engine</Text>
+          <Text style={styles.largeTitle}>Yield Engine</Text>
           <Text style={styles.subtitle}>
-            Converts raw weighed ingredients + oil absorption + total cooked weight into accurate calories per gram & portion.
+            Converts raw weighed ingredients + oil absorption + cooked pot weight into exact macros per gram.
           </Text>
         </View>
 
         {/* Recipe Name Card */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>RECIPE NAME</Text>
+          <Text style={styles.sectionTitle}>Recipe Name</Text>
           <TextInput
-            style={styles.textInput}
+            style={styles.input}
             value={recipeName}
             onChangeText={setRecipeName}
-            placeholder="e.g. Mom's Sambar, Chicken Curry"
-            placeholderTextColor={theme.textTertiary}
+            placeholder="e.g. Toor Dal Tadka, Chicken Biryani"
+            placeholderTextColor={theme.textFaint}
           />
         </View>
 
-        {/* Raw Ingredients Section */}
+        {/* 1. Raw Ingredients Section */}
         <View style={styles.card}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.cardLabel}>1. RAW INGREDIENTS</Text>
-            <Text style={styles.ingredientsCount}>{ingredients.length} items</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>1. Raw Weighed Ingredients</Text>
+            <Text style={styles.countText}>{ingredients.length} items</Text>
           </View>
 
           {ingredients.map((item, index) => {
@@ -172,216 +175,238 @@ export default function RecipeYieldScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.ingredientName}>{item.name}</Text>
                   <Text style={styles.ingredientMacros}>
-                    {rawKcal} kcal • {rawProtein}g P
+                    {rawKcal} kcal · P {rawProtein}g
                   </Text>
                 </View>
 
-                <View style={styles.gramsInputBox}>
+                <View style={styles.stepperGramsBox}>
                   <TextInput
-                    style={styles.gramsInput}
+                    style={styles.stepperInput}
                     keyboardType="numeric"
                     value={item.rawGrams.toString()}
                     onChangeText={(txt) => handleUpdateIngredientGrams(index, txt)}
                   />
-                  <Text style={styles.gramsUnit}>g raw</Text>
+                  <Text style={styles.stepperUnit}>g raw</Text>
                 </View>
 
                 <TouchableOpacity
-                  style={styles.deleteIngredientBtn}
+                  style={styles.deleteBtn}
                   onPress={() => handleRemoveIngredient(index)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                  <Text style={styles.deleteIngredientText}>✕</Text>
+                  <Text style={styles.deleteBtnText}>✕</Text>
                 </TouchableOpacity>
               </View>
             );
           })}
 
-          {/* Quick Preset Buttons */}
-          <Text style={styles.presetsLabel}>+ Quick Add Raw Staples:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetsScroll}>
+          {/* Quick Staple Presets */}
+          <Text style={styles.subHeading}>+ Add Raw Staples</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.presetsScroll}
+            contentContainerStyle={styles.presetsContent}
+          >
             {COMMON_RAW_PRESETS.map((p, i) => (
               <TouchableOpacity
                 key={i}
-                style={styles.presetPill}
+                style={styles.presetChip}
                 onPress={() => handleAddPreset(p)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.presetPillText}>+ {p.name.replace(' (raw)', '')}</Text>
+                <Text style={styles.presetChipText}>+ {p.name.replace(' (raw)', '')}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
-        {/* Oil Precision Section */}
+        {/* 2. Oil Absorption Precision Section */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>2. COOKING OIL PRECISION</Text>
-          <Text style={styles.cardHint}>
+          <Text style={styles.sectionTitle}>2. Cooking Oil Precision</Text>
+          <Text style={styles.hintText}>
             Oil added minus oil left in pan = true oil retained (pure fat @ 9 kcal/g).
           </Text>
 
-          <View style={styles.oilInputsRow}>
+          <View style={styles.inputsRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.subInputLabel}>Oil Added (g)</Text>
+              <Text style={styles.inputLabel}>Oil Added (g)</Text>
               <TextInput
-                style={styles.textInput}
+                style={styles.input}
                 keyboardType="numeric"
                 value={oilAdded}
                 onChangeText={setOilAdded}
                 placeholder="10"
-                placeholderTextColor={theme.textTertiary}
+                placeholderTextColor={theme.textFaint}
               />
             </View>
-            <View style={{ flex: 1, marginHorizontal: Spacing.two }}>
-              <Text style={styles.subInputLabel}>Oil Left in Pan (g)</Text>
+            <View style={{ flex: 1, marginHorizontal: Spacing.sm }}>
+              <Text style={styles.inputLabel}>Oil Left in Pan (g)</Text>
               <TextInput
-                style={styles.textInput}
+                style={styles.input}
                 keyboardType="numeric"
                 value={oilLeftInPan}
                 onChangeText={setOilLeftInPan}
                 placeholder="0"
-                placeholderTextColor={theme.textTertiary}
+                placeholderTextColor={theme.textFaint}
               />
             </View>
             <View style={styles.oilRetainedBox}>
-              <Text style={styles.subInputLabel}>Oil Retained</Text>
-              <Text style={styles.oilRetainedVal}>{oilRetainedGrams}g</Text>
-              <Text style={styles.oilKcalVal}>
-                +{Math.round(oilRetainedGrams * 9)} kcal
-              </Text>
+              <Text style={styles.inputLabel}>Oil Retained</Text>
+              <Text style={styles.oilRetainedValue}>{oilRetainedGrams} g</Text>
+              <Text style={styles.oilKcalValue}>+{Math.round(oilRetainedGrams * 9)} kcal</Text>
             </View>
           </View>
         </View>
 
-        {/* Cooked Dish Scale & Yield Weight */}
+        {/* 3. Cooked Dish Weight Section */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>3. FINAL COOKED DISH WEIGHT</Text>
-          <Text style={styles.cardHint}>
-            Weigh the entire cooked pot or dish once finished on the stove.
+          <Text style={styles.sectionTitle}>3. Cooked Pot Weight</Text>
+          <Text style={styles.hintText}>
+            Weigh the entire cooked pot or dish on a kitchen scale after cooking.
           </Text>
 
-          <View style={styles.oilInputsRow}>
+          <View style={styles.inputsRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.subInputLabel}>Cooked Weight (g)</Text>
+              <Text style={styles.inputLabel}>Cooked Pot Weight (g)</Text>
               <TextInput
-                style={[styles.textInput, styles.highlightInput]}
+                style={styles.input}
                 keyboardType="numeric"
                 value={cookedWeight}
                 onChangeText={setCookedWeight}
-                placeholder="350"
-                placeholderTextColor={theme.textTertiary}
+                placeholder="380"
+                placeholderTextColor={theme.textFaint}
               />
             </View>
-            <View style={{ flex: 1, marginLeft: Spacing.two }}>
-              <Text style={styles.subInputLabel}>Servings</Text>
+            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+              <Text style={styles.inputLabel}>Estimated Servings</Text>
               <TextInput
-                style={styles.textInput}
+                style={styles.input}
                 keyboardType="numeric"
                 value={servings}
                 onChangeText={setServings}
                 placeholder="2"
-                placeholderTextColor={theme.textTertiary}
+                placeholderTextColor={theme.textFaint}
               />
             </View>
           </View>
 
-          <View style={styles.yieldMetricsBar}>
-            <Text style={styles.yieldMetricText}>
-              Raw: <Text style={styles.yieldBold}>{totalRawGrams}g</Text>
+          {/* Raw to Cooked Ratio Preview */}
+          <View style={styles.ratioBar}>
+            <Text style={styles.ratioLabel}>
+              Raw: <Text style={styles.ratioVal}>{totalRawGrams}g</Text>
             </Text>
-            <Text style={styles.yieldArrow}>➡️</Text>
-            <Text style={styles.yieldMetricText}>
-              Cooked: <Text style={styles.yieldBold}>{cookedGramsNumber}g</Text>
+            <Text style={styles.ratioArrow}>→</Text>
+            <Text style={styles.ratioLabel}>
+              Cooked: <Text style={styles.ratioVal}>{cookedGramsNumber}g</Text>
             </Text>
-            <View style={styles.yieldRatioBadge}>
-              <Text style={styles.yieldRatioText}>
-                {totalRawGrams > 0 ? (cookedGramsNumber / totalRawGrams).toFixed(2) : 1}x yield
-              </Text>
+            <View style={styles.yieldPill}>
+              <Text style={styles.yieldPillText}>{yieldRatio}x yield</Text>
             </View>
           </View>
         </View>
 
-        {/* Yield Output Results Dashboard */}
+        {/* 4. Results Panel (Surface Card, Saffron for Key Result, Greys for Everything Else) */}
         {yieldResult && roundedTotals && roundedPer100g && roundedPerGram && (
           <View style={styles.resultsCard}>
             <View style={styles.resultsHeader}>
-              <Text style={styles.resultsTitle}>YIELD ENGINE RESULTS</Text>
-              <View style={styles.densityPill}>
-                <Text style={styles.densityText}>{(Math.round(roundedPerGram.kcal * 100) / 100)} kcal / g</Text>
-              </View>
-            </View>
-
-            {/* Total Dish */}
-            <View style={styles.resultRowTotal}>
-              <View>
-                <Text style={styles.resultTotalTitle}>Full Cooked Dish ({cookedGramsNumber}g)</Text>
-                <Text style={styles.resultTotalMacros}>
-                  P: {roundedTotals.protein}g • C: {roundedTotals.carbs}g • F: {roundedTotals.fat}g • Fibre: {roundedTotals.fibre}g
+              <Text style={styles.resultsTitle}>Yield Engine Output</Text>
+              <View style={styles.energyDensityPill}>
+                <Text style={styles.energyDensityText}>
+                  {(Math.round(roundedPerGram.kcal * 100) / 100)} kcal / g
                 </Text>
               </View>
-              <Text style={styles.resultTotalKcal}>{Math.round(roundedTotals.kcal)} kcal</Text>
             </View>
 
-            {/* Per 100g Cooked */}
-            <View style={styles.servingComparisonGrid}>
+            {/* Total Cooked Dish Summary */}
+            <View style={styles.totalDishRow}>
+              <View>
+                <Text style={styles.totalDishHeading}>Total Dish ({cookedGramsNumber}g)</Text>
+                {/* Strictly ordered: Protein, Carbs, Fats, Fibre */}
+                <Text style={styles.totalDishMacros}>
+                  <Text style={{ color: theme.protein }}>P {roundedTotals.protein}g</Text>
+                  {'   '}
+                  <Text style={{ color: theme.carbs }}>C {roundedTotals.carbs}g</Text>
+                  {'   '}
+                  <Text style={{ color: theme.fats }}>F {roundedTotals.fat}g</Text>
+                  {'   '}
+                  <Text style={{ color: theme.fibre }}>Fi {roundedTotals.fibre}g</Text>
+                </Text>
+              </View>
+              <Text style={styles.totalDishKcal}>{Math.round(roundedTotals.kcal)} kcal</Text>
+            </View>
+
+            {/* Per 100g vs 1 Katori (150g) Comparison */}
+            <View style={styles.comparisonGrid}>
               <View style={styles.compCard}>
                 <Text style={styles.compLabel}>Per 100g Cooked</Text>
                 <Text style={styles.compKcal}>{Math.round(roundedPer100g.kcal)} kcal</Text>
                 <Text style={styles.compMacros}>
-                  P: {roundedPer100g.protein}g • C: {roundedPer100g.carbs}g • F: {roundedPer100g.fat}g
+                  <Text style={{ color: theme.protein }}>P {roundedPer100g.protein}g</Text>
+                  {'  '}
+                  <Text style={{ color: theme.carbs }}>C {roundedPer100g.carbs}g</Text>
+                  {'  '}
+                  <Text style={{ color: theme.fats }}>F {roundedPer100g.fat}g</Text>
                 </Text>
               </View>
 
-              {/* Per Standard Katori 150g */}
               <View style={styles.compCard}>
-                <Text style={styles.compLabel}>1 Katori (150g)</Text>
+                <Text style={styles.compLabel}>1 Standard Katori (150g)</Text>
                 <Text style={styles.compKcal}>{Math.round(roundedPerGram.kcal * 150)} kcal</Text>
                 <Text style={styles.compMacros}>
-                  P: {Math.round(roundedPerGram.protein * 150 * 10) / 10}g • C: {Math.round(roundedPerGram.carbs * 150 * 10) / 10}g
+                  <Text style={{ color: theme.protein }}>
+                    P {Math.round(roundedPerGram.protein * 150 * 10) / 10}g
+                  </Text>
+                  {'  '}
+                  <Text style={{ color: theme.carbs }}>
+                    C {Math.round(roundedPerGram.carbs * 150 * 10) / 10}g
+                  </Text>
                 </Text>
               </View>
             </View>
 
             {/* Custom Portion Tester */}
-            <View style={styles.customPortionTester}>
+            <View style={styles.customPortionRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.subInputLabel}>Custom Bowl Portion (g):</Text>
+                <Text style={styles.inputLabel}>Custom Bowl Portion (g):</Text>
                 <TextInput
-                  style={styles.portionInput}
+                  style={styles.input}
                   keyboardType="numeric"
                   value={customPortionGrams}
                   onChangeText={setCustomPortionGrams}
                 />
               </View>
-              <View style={styles.customPortionResult}>
-                <Text style={styles.customKcal}>
+              <View style={styles.customPortionResults}>
+                <Text style={styles.customPortionKcal}>
                   {Math.round(roundedPerGram.kcal * (parseFloat(customPortionGrams) || 0))} kcal
                 </Text>
-                <Text style={styles.customProtein}>
-                  {Math.round(roundedPerGram.protein * (parseFloat(customPortionGrams) || 0) * 10) / 10}g Protein
+                <Text style={styles.customPortionProtein}>
+                  P: {Math.round(roundedPerGram.protein * (parseFloat(customPortionGrams) || 0) * 10) / 10}g
                 </Text>
               </View>
             </View>
 
-            {/* Atwater & Quality Check */}
-            <View style={styles.qualityCheckRow}>
-              <Text style={styles.qualityCheckText}>
-                Quality check (Atwater variance): {atwaterDiffPercent}% off estimate (Verified Atwater consistency)
+            {/* Atwater Consistency Check (5% tolerance) */}
+            <View style={styles.atwaterBox}>
+              <Text style={[styles.atwaterText, Math.abs(atwaterDiffPercent) > 5 && { color: theme.danger }]}>
+                {Math.abs(atwaterDiffPercent) <= 5
+                  ? `Atwater check: ${atwaterDiffPercent}% difference (within 5% scientific tolerance)`
+                  : `Discrepancy: ${atwaterDiffPercent}% difference. Check raw inputs.`}
               </Text>
             </View>
 
-            {/* Save Recipe Button */}
+            {/* Single Full-Width Primary CTA: Save to Food Database */}
             {saveSuccess ? (
               <View style={styles.saveSuccessBanner}>
-                <Text style={styles.saveSuccessText}>✅ Saved! Recipe is now searchable in your Foods tab.</Text>
+                <Text style={styles.saveSuccessText}>Saved. Recipe is now in Foods database.</Text>
               </View>
             ) : (
               <TouchableOpacity
                 style={styles.saveRecipeBtn}
                 onPress={handleSaveRecipe}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
               >
-                <Text style={styles.saveRecipeBtnText}>💾 Save Recipe to Food Database</Text>
+                <Text style={styles.saveRecipeBtnText}>Save to Food Database</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -400,370 +425,345 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.six + 40,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl + 40,
+    gap: Spacing.md,
   },
   header: {
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.xs,
   },
-  badgeRow: {
-    alignSelf: 'flex-start',
-    backgroundColor: theme.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-    marginBottom: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  badgeText: {
-    color: theme.primary,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
     color: theme.text,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 12,
-    color: theme.textSecondary,
-    lineHeight: 17,
+    fontSize: 13,
+    color: theme.textMuted,
+    lineHeight: 18,
     marginTop: 2,
   },
   card: {
     backgroundColor: theme.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.border,
+    padding: Spacing.md,
   },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: theme.textTertiary,
-    letterSpacing: 0.5,
-    marginBottom: 6,
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.text,
+    marginBottom: 8,
   },
-  cardHint: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    marginBottom: Spacing.two,
+  hintText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    marginBottom: Spacing.sm,
   },
-  sectionHeaderRow: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  ingredientsCount: {
-    fontSize: 11,
-    color: theme.primary,
-    fontWeight: '700',
+  countText: {
+    fontSize: 12,
+    color: theme.textFaint,
+    fontWeight: '500',
   },
-  textInput: {
-    backgroundColor: theme.surfaceElevated,
+  input: {
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: theme.border,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 44,
     color: theme.text,
     fontSize: 14,
   },
-  highlightInput: {
-    borderColor: theme.primary,
-    fontWeight: '800',
+  inputLabel: {
+    fontSize: 12,
+    color: theme.textFaint,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  inputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   ingredientRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
   },
   ingredientName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
     color: theme.text,
   },
   ingredientMacros: {
-    fontSize: 11,
-    color: theme.textTertiary,
+    fontSize: 12,
+    color: theme.textMuted,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
-  gramsInputBox: {
+  stepperGramsBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 8,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: theme.border,
+    paddingHorizontal: 8,
+    height: 38,
     marginRight: 8,
   },
-  gramsInput: {
-    color: theme.text,
-    fontSize: 13,
-    fontWeight: '700',
+  stepperInput: {
     width: 44,
-    paddingVertical: 4,
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '600',
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
-  gramsUnit: {
-    fontSize: 10,
-    color: theme.textTertiary,
+  stepperUnit: {
+    fontSize: 11,
+    color: theme.textFaint,
     marginLeft: 2,
   },
-  deleteIngredientBtn: {
-    padding: 6,
+  deleteBtn: {
+    padding: 8,
   },
-  deleteIngredientText: {
-    color: theme.textTertiary,
-    fontSize: 13,
-    fontWeight: '700',
+  deleteBtnText: {
+    color: theme.textFaint,
+    fontSize: 14,
   },
-  presetsLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.textSecondary,
-    marginTop: Spacing.two,
+  subHeading: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.textMuted,
+    marginTop: Spacing.sm,
     marginBottom: 6,
   },
   presetsScroll: {
-    flexDirection: 'row',
+    maxHeight: 38,
   },
-  presetPill: {
-    backgroundColor: theme.surfaceElevated,
+  presetsContent: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  presetChip: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    minHeight: 34,
     borderRadius: Radius.pill,
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: theme.border,
+    backgroundColor: theme.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  presetPillText: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    fontWeight: '600',
-  },
-  oilInputsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  subInputLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: theme.textSecondary,
-    marginBottom: 4,
+  presetChipText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    fontWeight: '500',
   },
   oilRetainedBox: {
     flex: 1,
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.md,
-    padding: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
+    justifyContent: 'center',
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    minHeight: 44,
   },
-  oilRetainedVal: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.text,
-  },
-  oilKcalVal: {
-    fontSize: 10,
-    color: theme.fat,
+  oilRetainedValue: {
+    fontSize: 14,
     fontWeight: '700',
+    color: theme.fats,
+    fontVariant: ['tabular-nums'],
   },
-  yieldMetricsBar: {
+  oilKcalValue: {
+    fontSize: 11,
+    color: theme.textFaint,
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  ratioBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.surfaceElevated,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: Spacing.two,
-    borderWidth: 1,
-    borderColor: theme.border,
+    paddingVertical: 10,
+    marginTop: Spacing.sm,
+    gap: 8,
   },
-  yieldMetricText: {
-    fontSize: 12,
-    color: theme.textSecondary,
+  ratioLabel: {
+    fontSize: 13,
+    color: theme.textMuted,
   },
-  yieldBold: {
+  ratioVal: {
+    fontWeight: '600',
     color: theme.text,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
-  yieldArrow: {
+  ratioArrow: {
     fontSize: 14,
+    color: theme.textFaint,
   },
-  yieldRatioBadge: {
+  yieldPill: {
+    marginLeft: 'auto',
     backgroundColor: theme.primaryMuted,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
   },
-  yieldRatioText: {
+  yieldPillText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: theme.primary,
-    fontSize: 11,
-    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   resultsCard: {
-    backgroundColor: '#0F1A24',
-    borderRadius: Radius.xl,
-    padding: Spacing.four,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
+    backgroundColor: theme.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: Spacing.sm,
   },
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.three,
+    paddingBottom: Spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
   },
   resultsTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: theme.calories,
-    letterSpacing: 0.5,
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.text,
   },
-  densityPill: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  energyDensityPill: {
+    backgroundColor: theme.primaryMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
   },
-  densityText: {
+  energyDensityText: {
     fontSize: 12,
-    fontWeight: '800',
-    color: theme.calories,
+    fontWeight: '600',
+    color: theme.primary,
+    fontVariant: ['tabular-nums'],
   },
-  resultRowTotal: {
+  totalDishRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: Spacing.two,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: Spacing.two,
+    paddingVertical: 6,
   },
-  resultTotalTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+  totalDishHeading: {
+    fontSize: 15,
+    fontWeight: '600',
     color: theme.text,
   },
-  resultTotalMacros: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    marginTop: 2,
+  totalDishMacros: {
+    fontSize: 12,
+    marginTop: 4,
+    fontVariant: ['tabular-nums'],
   },
-  resultTotalKcal: {
+  totalDishKcal: {
     fontSize: 20,
-    fontWeight: '900',
-    color: theme.text,
+    fontWeight: '700',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
   },
-  servingComparisonGrid: {
+  comparisonGrid: {
     flexDirection: 'row',
-    gap: Spacing.two,
-    marginBottom: Spacing.two,
+    gap: Spacing.sm,
   },
   compCard: {
     flex: 1,
-    backgroundColor: theme.surfaceElevated,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: theme.border,
+    padding: Spacing.sm,
   },
   compLabel: {
     fontSize: 11,
-    color: theme.textTertiary,
-    fontWeight: '700',
+    color: theme.textFaint,
+    fontWeight: '500',
   },
   compKcal: {
     fontSize: 16,
-    fontWeight: '800',
-    color: theme.primary,
+    fontWeight: '700',
+    color: theme.calories,
     marginVertical: 2,
+    fontVariant: ['tabular-nums'],
   },
   compMacros: {
-    fontSize: 10,
-    color: theme.textSecondary,
+    fontSize: 11,
+    color: theme.textMuted,
+    fontVariant: ['tabular-nums'],
   },
-  customPortionTester: {
+  customPortionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.surface,
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+  },
+  customPortionResults: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  customPortionKcal: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
+  },
+  customPortionProtein: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.protein,
+    fontVariant: ['tabular-nums'],
+  },
+  atwaterBox: {
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
     padding: 10,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: Spacing.two,
   },
-  portionInput: {
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    color: theme.text,
-    fontSize: 14,
-    fontWeight: '700',
-    width: 70,
-  },
-  customPortionResult: {
-    alignItems: 'flex-end',
-  },
-  customKcal: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.calories,
-  },
-  customProtein: {
+  atwaterText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: theme.protein,
-  },
-  qualityCheckRow: {
-    marginVertical: 4,
-  },
-  qualityCheckText: {
-    fontSize: 10,
-    color: theme.textTertiary,
-    fontStyle: 'italic',
+    color: theme.textFaint,
+    lineHeight: 16,
   },
   saveRecipeBtn: {
     backgroundColor: theme.primary,
     borderRadius: Radius.md,
-    paddingVertical: 12,
+    minHeight: 50,
     alignItems: 'center',
-    marginTop: Spacing.two,
+    justifyContent: 'center',
+    width: '100%',
+    marginTop: 4,
   },
   saveRecipeBtnText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
+    color: theme.onPrimary,
+    fontSize: 16,
+    fontWeight: '600',
   },
   saveSuccessBanner: {
-    backgroundColor: '#064E3B',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    marginTop: Spacing.two,
-    borderWidth: 1,
-    borderColor: theme.primary,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 4,
   },
   saveSuccessText: {
-    color: '#D1FAE5',
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

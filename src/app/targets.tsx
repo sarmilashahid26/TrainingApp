@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  TextInput,
   Switch,
   Alert,
 } from 'react-native';
@@ -15,15 +16,66 @@ import { useNutrition } from '@/context/NutritionContext';
 const theme = Colors.dark;
 
 export default function TargetsScreen() {
-  const { targets, activeDayType, setActiveDayType } = useNutrition();
+  const {
+    targets,
+    activeDayType,
+    setActiveDayType,
+    weightLogs,
+    calculatedTrends,
+    currentScaleWeight,
+    currentTrendWeight,
+    adaptiveTdee,
+    addWeightLog,
+    applyWeeklyCheckIn,
+    userCalibrations,
+    updateCalibrations,
+  } = useNutrition();
 
-  const [goalMode, setGoalMode] = useState<'cut' | 'maintain' | 'bulk'>('cut');
+  const [selectedRate, setSelectedRate] = useState<number>(targets.weeklyRateKg ?? -0.4);
   const [offlineSyncEnabled, setOfflineSyncEnabled] = useState(true);
+
+  // Daily weight entry input state
+  const [newScaleWeight, setNewScaleWeight] = useState<string>(currentScaleWeight.toString());
+  const [weightLoggedToast, setWeightLoggedToast] = useState(false);
+
+  // Household calibrations input state
+  const [katoriInput, setKatoriInput] = useState<string>(userCalibrations.katoriGrams.toString());
+  const [rotiInput, setRotiInput] = useState<string>(userCalibrations.rotiGrams.toString());
+  const [calibrationsSaved, setCalibrationsSaved] = useState(false);
+
+  const handleLogScaleWeight = () => {
+    const val = parseFloat(newScaleWeight);
+    if (!Number.isFinite(val) || val < 30 || val > 300) {
+      Alert.alert('Invalid Weight', 'Please enter a valid scale weight between 30 and 300 kg.');
+      return;
+    }
+    addWeightLog(val, 'Today');
+    setWeightLoggedToast(true);
+    setTimeout(() => setWeightLoggedToast(false), 2500);
+  };
+
+  const handleSaveCalibrations = () => {
+    const k = parseInt(katoriInput, 10);
+    const r = parseInt(rotiInput, 10);
+    if (k > 0 && r > 0) {
+      updateCalibrations({ katoriGrams: k, rotiGrams: r });
+      setCalibrationsSaved(true);
+      setTimeout(() => setCalibrationsSaved(false), 2500);
+    }
+  };
+
+  const handleApplyStrategy = () => {
+    applyWeeklyCheckIn(selectedRate);
+    Alert.alert(
+      'Targets Updated',
+      `Weekly targets have been updated based on your adaptive TDEE of ${adaptiveTdee.tdee} kcal/day and chosen rate of ${selectedRate >= 0 ? '+' : ''}${selectedRate} kg/week.`
+    );
+  };
 
   const handleExportData = () => {
     Alert.alert(
-      'Export Personal Nutrition Data',
-      'Under India’s DPDP Act, you can download all your logged food weights, recipes, and body weight logs as a portable JSON/CSV archive.',
+      'Export Nutrition & Weight Data',
+      'Under India’s DPDP Act, you can download all your logged food weights, Kalman trend weights, calibrated household measures, and recipes as an encrypted JSON archive.',
       [{ text: 'Download Archive', onPress: () => {} }, { text: 'Cancel', style: 'cancel' }]
     );
   };
@@ -31,7 +83,7 @@ export default function TargetsScreen() {
   const handleDeleteData = () => {
     Alert.alert(
       'Delete My Data (DPDP Act)',
-      'This will permanently erase all local SQLite databases and synced cloud records. Your data will not be recoverable.',
+      'This will permanently erase all local SQLite databases and cloud records. Your data will not be recoverable.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete Permanently', style: 'destructive', onPress: () => {} },
@@ -39,14 +91,29 @@ export default function TargetsScreen() {
     );
   };
 
+  // Recent 6 days of weight log history for the table
+  const recentHistory = weightLogs.slice(-6).map((entry, idx) => {
+    const globalIdx = weightLogs.length - 6 + idx;
+    const trendVal = calculatedTrends[globalIdx];
+    return {
+      date: entry.date,
+      scale: entry.weightKg,
+      trend: Number.isNaN(trendVal) ? null : trendVal,
+    };
+  });
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Lifter Goals & Targets</Text>
+          <Text style={styles.largeTitle}>Targets & Coaching</Text>
           <Text style={styles.subtitle}>
-            Adaptive targets tailored for gym-goers, lifters, and serious trackers
+            Adaptive energy engine & calibrated Indian home cooking
           </Text>
         </View>
 
@@ -54,136 +121,269 @@ export default function TargetsScreen() {
         <View style={styles.card}>
           <View style={styles.profileRow}>
             <View style={styles.avatarBox}>
-              <Text style={styles.avatarText}>🏋️</Text>
+              <Text style={styles.avatarText}>M</Text>
             </View>
-            <View style={{ flex: 1, marginLeft: Spacing.two }}>
-              <Text style={styles.profileName}>Arjun S. (Lifter)</Text>
-              <Text style={styles.profileDetail}>Current: 74.0 kg • Target: 71.5 kg • Lean Cut</Text>
+            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+              <Text style={styles.profileName}>Lifter Profile</Text>
+              <Text style={styles.profileDetail}>
+                Trend: {currentTrendWeight} kg · Target: {targets.targetWeightKg} kg · {targets.proteinPerKg}g/kg Protein
+              </Text>
             </View>
             <View style={styles.trialPill}>
-              <Text style={styles.trialText}>7-DAY TRIAL</Text>
+              <Text style={styles.trialText}>ADAPTIVE ACTIVE</Text>
             </View>
           </View>
         </View>
 
-        {/* Goal Strategy Selector */}
+        {/* 1. Weight Trend & Kalman Filter Card */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>GOAL STRATEGY</Text>
-          <View style={styles.goalPillsRow}>
-            {(['cut', 'maintain', 'bulk'] as const).map((mode) => (
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>Weight Trend (Kalman Filter)</Text>
+            <View style={styles.neutralBadge}>
+              <Text style={styles.neutralBadgeText}>Noise Filtered</Text>
+            </View>
+          </View>
+          <Text style={styles.cardHelperText}>
+            Separates true tissue changes from daily water, glycogen, and sodium fluctuations. Missed weigh-ins are automatically bridged.
+          </Text>
+
+          {/* Metric Comparison Hero */}
+          <View style={styles.trendHeroGrid}>
+            <View style={styles.trendMetricCard}>
+              <Text style={styles.trendMetricLabel}>TREND WEIGHT</Text>
+              <Text style={styles.trendMetricValue}>{currentTrendWeight} <Text style={styles.unitText}>kg</Text></Text>
+              <Text style={styles.trendSubtext}>True metabolic trend</Text>
+            </View>
+            <View style={styles.trendMetricCard}>
+              <Text style={styles.trendMetricLabel}>SCALE READING</Text>
+              <Text style={[styles.trendMetricValue, { color: theme.textMuted }]}>
+                {currentScaleWeight} <Text style={styles.unitText}>kg</Text>
+              </Text>
+              <Text style={styles.trendSubtext}>Raw bathroom scale</Text>
+            </View>
+          </View>
+
+          {/* Log Today's Scale Weight Input */}
+          <View style={styles.weighInRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inputMiniLabel}>Log Today's Weight</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="decimal-pad"
+                value={newScaleWeight}
+                onChangeText={setNewScaleWeight}
+                placeholder="Scale weight (kg)"
+                placeholderTextColor={theme.textMuted}
+              />
+            </View>
+            <TouchableOpacity style={styles.logWeightBtn} onPress={handleLogScaleWeight}>
+              <Text style={styles.logWeightBtnText}>
+                {weightLoggedToast ? 'Updated ✓' : 'Record'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Recent Weight Table */}
+          <View style={styles.historyTable}>
+            <View style={styles.tableHeaderRow}>
+              <Text style={[styles.tableColHeader, { flex: 1.2 }]}>Day</Text>
+              <Text style={[styles.tableColHeader, { flex: 1 }]}>Scale</Text>
+              <Text style={[styles.tableColHeader, { flex: 1, textAlign: 'right' }]}>Trend</Text>
+            </View>
+            {recentHistory.map((row, idx) => (
+              <View key={idx} style={styles.tableDataRow}>
+                <Text style={[styles.tableCellText, { flex: 1.2, color: theme.textMuted }]}>{row.date}</Text>
+                <Text style={[styles.tableCellText, { flex: 1 }]}>
+                  {row.scale != null ? `${row.scale} kg` : '—'}
+                </Text>
+                <Text style={[styles.tableCellText, { flex: 1, textAlign: 'right', color: theme.text, fontWeight: '600' }]}>
+                  {row.trend != null ? `${row.trend} kg` : '—'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* 2. Adaptive Calorie Burn (TDEE Engine) */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>Adaptive Calorie Burn (TDEE)</Text>
+            <View style={styles.confidencePill}>
+              <Text style={styles.confidencePillText}>
+                {Math.round(adaptiveTdee.confidence * 100)}% Confidence
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.cardHelperText}>
+            Deterministic calculation from energy balance: Intake minus trend weight rate of change. Fitness tracker burn is excluded.
+          </Text>
+
+          <View style={styles.tdeeHeroBox}>
+            <Text style={styles.tdeeHeroLabel}>EXPENDITURE ESTIMATE</Text>
+            <Text style={styles.tdeeHeroNumber}>
+              {adaptiveTdee.tdee} <Text style={styles.tdeeHeroUnit}>kcal / day</Text>
+            </Text>
+            <View style={styles.confidenceBarContainer}>
+              <View
+                style={[
+                  styles.confidenceBarFill,
+                  { width: `${Math.max(10, Math.round(adaptiveTdee.confidence * 100))}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.confidenceStatusText}>
+              Learning progress: {adaptiveTdee.daysLogged} of {adaptiveTdee.totalWindowDays} days logged ({Math.round(adaptiveTdee.completeness * 100)}% complete)
+            </Text>
+          </View>
+
+          <View style={styles.neutralExplainerBox}>
+            <Text style={styles.neutralExplainerText}>
+              Adherence-neutral coaching: We calculate from what you actually eat, never what you were supposed to eat. No guilt, no scolding.
+            </Text>
+          </View>
+        </View>
+
+        {/* 3. Weekly Strategy & Auto-Adjusted Targets */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>Weekly Strategy & Auto-Adjust</Text>
+          </View>
+
+          <Text style={styles.cardHelperText}>
+            Target rate of weight change per week. Auto-adjustments are clamped to a safe step size of ±150 kcal.
+          </Text>
+
+          {/* Rate Selector Pills */}
+          <View style={styles.ratePillsRow}>
+            {[
+              { rate: -0.6, label: 'Fast Cut (-0.6kg)' },
+              { rate: -0.4, label: 'Steady Cut (-0.4kg)' },
+              { rate: 0.0, label: 'Maintain (0.0kg)' },
+              { rate: 0.25, label: 'Lean Bulk (+0.25kg)' },
+            ].map((item) => (
               <TouchableOpacity
-                key={mode}
-                style={[styles.goalPill, goalMode === mode && styles.goalPillActive]}
-                onPress={() => setGoalMode(mode)}
+                key={item.rate}
+                style={[styles.ratePill, selectedRate === item.rate && styles.ratePillActive]}
+                onPress={() => setSelectedRate(item.rate)}
               >
-                <Text style={[styles.goalPillText, goalMode === mode && styles.goalPillTextActive]}>
-                  {mode === 'cut' ? '✂️ Cut (-350 kcal)' : mode === 'maintain' ? '⚖️ Maintain' : '💪 Bulk (+250 kcal)'}
+                <Text style={[styles.ratePillText, selectedRate === item.rate && styles.ratePillTextActive]}>
+                  {item.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Protein Ratio Calculation */}
-          <View style={styles.proteinRatioBox}>
-            <View style={styles.proteinRatioLeft}>
-              <Text style={styles.proteinRatioTitle}>Protein per kg Bodyweight</Text>
-              <Text style={styles.proteinRatioDesc}>
-                Set to 2.0g/kg bodyweight for optimal lean mass retention during a caloric deficit.
-              </Text>
-            </View>
-            <View style={styles.proteinRatioBadge}>
-              <Text style={styles.proteinRatioNum}>2.0 g/kg</Text>
-              <Text style={styles.proteinTargetGrams}>148g / day</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Training vs Rest Day Targets Cycling */}
-        <View style={styles.card}>
-          <View style={styles.cyclingHeader}>
-            <Text style={styles.cardLabel}>CALORIE & MACRO CYCLING</Text>
-            <TouchableOpacity onPress={() => setActiveDayType(activeDayType === 'training' ? 'rest' : 'training')}>
-              <Text style={styles.toggleActiveDayLink}>
-                Switch Active ({activeDayType === 'training' ? 'Training' : 'Rest'})
-              </Text>
-            </TouchableOpacity>
-          </View>
-
+          {/* Dynamic Macro Targets Preview */}
           <View style={styles.targetsTable}>
-            {/* Training Day Row */}
-            <View style={[styles.targetRow, activeDayType === 'training' && styles.targetRowActive]}>
+            <View style={[styles.targetRow, styles.targetRowActive]}>
               <View style={styles.dayCol}>
-                <Text style={styles.dayColTitle}>🏋️ Training Day</Text>
-                <Text style={styles.dayColSub}>Higher carbs for glycogen</Text>
+                <Text style={styles.dayColTitle}>Daily Targets</Text>
+                <Text style={styles.dayColSub}>Adjusted by adaptive energy engine</Text>
               </View>
               <View style={styles.dayStatsCol}>
                 <Text style={styles.targetKcal}>{targets.trainingDay.kcal} kcal</Text>
                 <Text style={styles.targetMacros}>
-                  P: {targets.trainingDay.protein}g • C: {targets.trainingDay.carbs}g • F: {targets.trainingDay.fat}g
-                </Text>
-              </View>
-            </View>
-
-            {/* Rest Day Row */}
-            <View style={[styles.targetRow, activeDayType === 'rest' && styles.targetRowActive]}>
-              <View style={styles.dayCol}>
-                <Text style={styles.dayColTitle}>🧘 Rest Day</Text>
-                <Text style={styles.dayColSub}>Reduced carbohydrates</Text>
-              </View>
-              <View style={styles.dayStatsCol}>
-                <Text style={styles.targetKcal}>{targets.restDay.kcal} kcal</Text>
-                <Text style={styles.targetMacros}>
-                  P: {targets.restDay.protein}g • C: {targets.restDay.carbs}g • F: {targets.restDay.fat}g
+                  <Text style={{ color: theme.protein }}>P {targets.trainingDay.protein}g</Text>
+                  {'   '}
+                  <Text style={{ color: theme.carbs }}>C {targets.trainingDay.carbs}g</Text>
+                  {'   '}
+                  <Text style={{ color: theme.fats }}>F {targets.trainingDay.fat}g</Text>
                 </Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.safetyFloorBox}>
-            <Text style={styles.safetyFloorText}>
-              🛡️ Metabolic Safety Floor: 1,600 kcal minimum maintained. No crash diets.
-            </Text>
-          </View>
+          <TouchableOpacity style={styles.applyBtn} onPress={handleApplyStrategy}>
+            <Text style={styles.applyBtnText}>Apply Weekly Check-in Targets</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* RevenueCat Hard Paywall Preview */}
-        <View style={styles.paywallCard}>
-          <View style={styles.paywallHeader}>
-            <Text style={styles.paywallTitle}>MAXIII Full Access Plan</Text>
-            <View style={styles.paywallBadge}>
-              <Text style={styles.paywallBadgeText}>REVENUECAT READY</Text>
+        {/* 4. Household Measures Calibration (Indian Kitchen Moat) */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>My Household Calibrations</Text>
+            <View style={styles.neutralBadge}>
+              <Text style={styles.neutralBadgeText}>Indian Kitchen</Text>
             </View>
           </View>
-          <Text style={styles.paywallSubtitle}>
-            Hard paywall model with 7-day full access trial. Your saved food logs & custom recipes are permanently retained even if subscription lapses.
+          <Text style={styles.cardHelperText}>
+            Weigh your home katori and phulka once. Future quick logs instantly use your personal household weights.
+          </Text>
+
+          <View style={styles.calibrationGrid}>
+            <View style={styles.calibrationCol}>
+              <Text style={styles.inputMiniLabel}>My Katori (g)</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="numeric"
+                value={katoriInput}
+                onChangeText={setKatoriInput}
+                placeholder="150"
+                placeholderTextColor={theme.textMuted}
+              />
+              <Text style={styles.calibDesc}>Standard dal / curry bowl</Text>
+            </View>
+
+            <View style={styles.calibrationCol}>
+              <Text style={styles.inputMiniLabel}>My Phulka (g)</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="numeric"
+                value={rotiInput}
+                onChangeText={setRotiInput}
+                placeholder="30"
+                placeholderTextColor={theme.textMuted}
+              />
+              <Text style={styles.calibDesc}>Single roti without ghee</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.saveCalibBtn} onPress={handleSaveCalibrations}>
+            <Text style={styles.saveCalibBtnText}>
+              {calibrationsSaved ? 'Calibrations Saved ✓' : 'Save Household Measures'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 5. Subscription Plan Preview */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.sectionTitle}>Full Access Plan</Text>
+            <View style={styles.trialPill}>
+              <Text style={styles.trialText}>REVENUECAT</Text>
+            </View>
+          </View>
+          <Text style={styles.cardHelperText}>
+            7-day full access trial. All saved recipes, kitchen calibrations, and weight trend logs are permanently preserved.
           </Text>
 
           <View style={styles.planOptionsRow}>
             <View style={[styles.planBox, styles.planBoxHighlighted]}>
               <Text style={styles.planTag}>BEST VALUE</Text>
-              <Text style={styles.planDuration}>Annual</Text>
+              <Text style={styles.planDuration}>Annual Plan</Text>
               <Text style={styles.planPrice}>₹1,499</Text>
               <Text style={styles.planPerMonth}>₹125 / month</Text>
             </View>
             <View style={styles.planBox}>
-              <Text style={styles.planDuration}>Monthly</Text>
+              <Text style={styles.planDuration}>Monthly Plan</Text>
               <Text style={styles.planPrice}>₹199</Text>
               <Text style={styles.planPerMonth}>Billed monthly</Text>
             </View>
           </View>
         </View>
 
-        {/* Offline SQLite & DPDP Act Data Privacy */}
+        {/* 6. Offline SQLite & DPDP Act Data Privacy */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>DATA PRIVACY & OFFLINE STORAGE</Text>
-          <Text style={styles.dpdpNotice}>
-            Compliant with India's Digital Personal Data Protection (DPDP) Act. Nutrition logs are saved on-device via SQLite for 100% offline access.
+          <Text style={styles.sectionTitle}>Data Privacy & Offline Storage</Text>
+          <Text style={styles.cardHelperText}>
+            Compliant with India's Digital Personal Data Protection (DPDP) Act. All food data is stored on-device via SQLite.
           </Text>
 
           <View style={styles.settingToggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.settingTitle}>On-Device SQLite Cache</Text>
-              <Text style={styles.settingDesc}>Allows instant food searches without cellular data</Text>
+              <Text style={styles.settingTitle}>On-Device SQLite Storage</Text>
+              <Text style={styles.settingDesc}>Instant lookups without internet connection</Text>
             </View>
             <Switch
               value={offlineSyncEnabled}
@@ -194,18 +394,25 @@ export default function TargetsScreen() {
 
           <View style={styles.dpdpActionsRow}>
             <TouchableOpacity style={styles.exportBtn} onPress={handleExportData}>
-              <Text style={styles.exportBtnText}>📥 Export My Logs (JSON)</Text>
+              <Text style={styles.exportBtnText}>Export My Data (JSON)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteData}>
-              <Text style={styles.deleteBtnText}>🗑️ Delete All Data</Text>
+              <Text style={styles.deleteBtnText}>Delete All Data</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Legal Disclaimer */}
-        <View style={styles.legalBox}>
-          <Text style={styles.legalText}>
-            Disclaimer: MAXIII is an energy tracking calculation tool and does not provide medical diagnoses or dietary medical advice. Consult a certified nutritionist or physician for clinical health needs.
+        {/* Safety Floor Notice */}
+        <View style={styles.safetyFloorBox}>
+          <Text style={styles.safetyFloorText}>
+            Calorie floor: minimum 1,600 kcal (males) / 1,200 kcal (females) for metabolic safety.
+          </Text>
+        </View>
+
+        {/* Health Disclaimer */}
+        <View style={styles.disclaimerBox}>
+          <Text style={styles.disclaimerText}>
+            Accuracy depends on weighing ingredients. Not medical advice.
           </Text>
         </View>
       </ScrollView>
@@ -222,354 +429,475 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.six + 40,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl + 40,
+    gap: Spacing.md,
   },
   header: {
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.xs,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
     color: theme.text,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 12,
-    color: theme.textSecondary,
+    fontSize: 13,
+    color: theme.textMuted,
     marginTop: 2,
   },
   card: {
     backgroundColor: theme.surface,
     borderRadius: Radius.lg,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderColor: theme.border,
+    padding: Spacing.md,
   },
-  cardLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: theme.textTertiary,
-    letterSpacing: 0.5,
-    marginBottom: Spacing.two,
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  cardHelperText: {
+    fontSize: 13,
+    color: theme.textMuted,
+    lineHeight: 18,
+    marginBottom: 12,
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatarBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.surfaceElevated,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
   },
   avatarText: {
-    fontSize: 20,
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.primary,
   },
   profileName: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     color: theme.text,
   },
   profileDetail: {
     fontSize: 12,
-    color: theme.textSecondary,
+    color: theme.textMuted,
     marginTop: 2,
   },
   trialPill: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: theme.primaryMuted,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.3)',
   },
   trialText: {
-    color: theme.accent,
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '700',
+    color: theme.primary,
+    letterSpacing: 0.5,
   },
-  goalPillsRow: {
+  neutralBadge: {
+    backgroundColor: theme.surfaceRaised,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+  },
+  neutralBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: theme.textMuted,
+  },
+  trendHeroGrid: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: Spacing.three,
+    gap: Spacing.sm,
+    marginBottom: 12,
   },
-  goalPill: {
+  trendMetricCard: {
     flex: 1,
-    paddingVertical: 10,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    backgroundColor: theme.surfaceElevated,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
+    padding: Spacing.sm,
   },
-  goalPillActive: {
-    backgroundColor: theme.primaryMuted,
-    borderColor: theme.primary,
+  trendMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.textFaint,
+    letterSpacing: 0.5,
   },
-  goalPillText: {
+  trendMetricValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.text,
+    fontVariant: ['tabular-nums'],
+    marginVertical: 2,
+  },
+  unitText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: theme.textFaint,
+  },
+  trendSubtext: {
+    fontSize: 11,
+    color: theme.textMuted,
+  },
+  weighInRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+    marginBottom: 12,
+  },
+  inputMiniLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: theme.textSecondary,
+    color: theme.textFaint,
+    marginBottom: 4,
   },
-  goalPillTextActive: {
-    color: theme.primary,
-    fontWeight: '800',
-  },
-  proteinRatioBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.md,
-    padding: 12,
-    borderWidth: 1,
+  textInput: {
+    backgroundColor: theme.surfaceRaised,
     borderColor: theme.border,
-  },
-  proteinRatioLeft: {
-    flex: 1,
-    marginRight: 10,
-  },
-  proteinRatioTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.text,
-  },
-  proteinRatioDesc: {
-    fontSize: 11,
-    color: theme.textSecondary,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  proteinRatioBadge: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  proteinRatioNum: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: theme.primary,
-  },
-  proteinTargetGrams: {
-    fontSize: 11,
-    fontWeight: '700',
+    borderRadius: Radius.md,
     color: theme.text,
-    marginTop: 2,
+    paddingHorizontal: 12,
+    height: 44,
+    fontSize: 15,
   },
-  cyclingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  logWeightBtn: {
+    backgroundColor: theme.primary,
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: Radius.md,
     alignItems: 'center',
-    marginBottom: Spacing.two,
+    justifyContent: 'center',
+    minWidth: 84,
   },
-  toggleActiveDayLink: {
+  logWeightBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.onPrimary,
+  },
+  historyTable: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  tableColHeader: {
     fontSize: 11,
-    color: theme.primary,
+    fontWeight: '600',
+    color: theme.textFaint,
+    textTransform: 'uppercase',
+  },
+  tableDataRow: {
+    flexDirection: 'row',
+    paddingVertical: 6,
+  },
+  tableCellText: {
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
+    color: theme.text,
+  },
+  tdeeHeroBox: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: 10,
+  },
+  tdeeHeroLabel: {
+    fontSize: 11,
     fontWeight: '700',
+    color: theme.textFaint,
+    letterSpacing: 0.5,
+  },
+  tdeeHeroNumber: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: theme.calories,
+    fontVariant: ['tabular-nums'],
+    marginVertical: 4,
+  },
+  tdeeHeroUnit: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: theme.textFaint,
+  },
+  confidenceBarContainer: {
+    height: 6,
+    backgroundColor: theme.border,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginVertical: 6,
+  },
+  confidenceBarFill: {
+    height: '100%',
+    backgroundColor: theme.primary,
+    borderRadius: 3,
+  },
+  confidenceStatusText: {
+    fontSize: 11,
+    color: theme.textMuted,
+    fontVariant: ['tabular-nums'],
+  },
+  confidencePill: {
+    backgroundColor: theme.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+  },
+  confidencePillText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.primary,
+  },
+  neutralExplainerBox: {
+    backgroundColor: theme.surfaceRaised,
+    padding: 10,
+    borderRadius: Radius.sm,
+  },
+  neutralExplainerText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    lineHeight: 16,
+  },
+  switchDayTypeLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.primary,
+  },
+  ratePillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  ratePill: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratePillActive: {
+    backgroundColor: theme.primaryMuted,
+    borderColor: theme.primary,
+    borderWidth: 1,
+  },
+  ratePillText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.textMuted,
+  },
+  ratePillTextActive: {
+    color: theme.primary,
+    fontWeight: '600',
   },
   targetsTable: {
     gap: 8,
+    marginBottom: 12,
   },
   targetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: theme.surfaceElevated,
-    borderRadius: Radius.md,
+    backgroundColor: theme.surfaceRaised,
     padding: 12,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: theme.border,
+    borderColor: 'transparent',
   },
   targetRowActive: {
     borderColor: theme.primary,
-    backgroundColor: '#0F181B',
   },
   dayCol: {
     flex: 1,
   },
   dayColTitle: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     color: theme.text,
   },
   dayColSub: {
     fontSize: 11,
-    color: theme.textTertiary,
-    marginTop: 2,
+    color: theme.textMuted,
   },
   dayStatsCol: {
     alignItems: 'flex-end',
   },
   targetKcal: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: theme.calories,
+    fontVariant: ['tabular-nums'],
   },
   targetMacros: {
     fontSize: 11,
-    color: theme.textSecondary,
+    fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
-  safetyFloorBox: {
-    marginTop: Spacing.two,
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderRadius: Radius.sm,
-    padding: 8,
-  },
-  safetyFloorText: {
-    fontSize: 11,
-    color: theme.accent,
-    fontWeight: '600',
-  },
-  paywallCard: {
-    backgroundColor: '#121A22',
-    borderRadius: Radius.xl,
-    padding: Spacing.four,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
-  },
-  paywallHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  applyBtn: {
+    backgroundColor: theme.primary,
+    borderRadius: Radius.md,
+    minHeight: 48,
     alignItems: 'center',
-    marginBottom: 4,
+    justifyContent: 'center',
+    width: '100%',
   },
-  paywallTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.text,
+  applyBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.onPrimary,
   },
-  paywallBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.pill,
+  calibrationGrid: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: 12,
   },
-  paywallBadgeText: {
-    color: theme.calories,
-    fontSize: 9,
-    fontWeight: '800',
+  calibrationCol: {
+    flex: 1,
   },
-  paywallSubtitle: {
+  calibDesc: {
     fontSize: 11,
-    color: theme.textSecondary,
-    lineHeight: 16,
-    marginBottom: Spacing.three,
+    color: theme.textFaint,
+    marginTop: 4,
+  },
+  saveCalibBtn: {
+    backgroundColor: theme.surfaceRaised,
+    borderRadius: Radius.md,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  saveCalibBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
   },
   planOptionsRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    gap: Spacing.sm,
   },
   planBox: {
     flex: 1,
-    backgroundColor: theme.surfaceElevated,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
     padding: 12,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.border,
   },
   planBoxHighlighted: {
     borderColor: theme.primary,
-    backgroundColor: 'rgba(16, 185, 129, 0.08)',
   },
   planTag: {
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '700',
     color: theme.primary,
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   planDuration: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
   },
   planPrice: {
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 20,
+    fontWeight: '700',
     color: theme.text,
-    marginVertical: 4,
+    fontVariant: ['tabular-nums'],
+    marginVertical: 2,
   },
   planPerMonth: {
-    fontSize: 10,
-    color: theme.textTertiary,
-  },
-  dpdpNotice: {
     fontSize: 11,
-    color: theme.textSecondary,
-    lineHeight: 16,
-    marginBottom: Spacing.two,
+    color: theme.textMuted,
   },
   settingToggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-    marginBottom: Spacing.two,
+    marginBottom: 12,
   },
   settingTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: theme.text,
   },
   settingDesc: {
-    fontSize: 11,
-    color: theme.textTertiary,
+    fontSize: 12,
+    color: theme.textMuted,
     marginTop: 2,
   },
   dpdpActionsRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
-    marginTop: 4,
+    gap: Spacing.sm,
   },
   exportBtn: {
     flex: 1,
-    paddingVertical: 10,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    backgroundColor: theme.surfaceElevated,
+    height: 44,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.border,
+    justifyContent: 'center',
   },
   exportBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
     color: theme.text,
   },
   deleteBtn: {
     flex: 1,
-    paddingVertical: 10,
+    backgroundColor: theme.surfaceRaised,
     borderRadius: Radius.md,
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
+    height: 44,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.3)',
+    justifyContent: 'center',
   },
   deleteBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.danger,
+  },
+  safetyFloorBox: {
+    backgroundColor: theme.surfaceRaised,
+    padding: 12,
+    borderRadius: Radius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.primary,
+  },
+  safetyFloorText: {
+    fontSize: 12,
+    color: theme.textMuted,
+    lineHeight: 16,
+  },
+  disclaimerBox: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+  },
+  disclaimerText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: theme.fat,
-  },
-  legalBox: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.two,
-  },
-  legalText: {
-    fontSize: 10,
-    color: theme.textTertiary,
+    color: theme.textFaint,
     textAlign: 'center',
-    lineHeight: 14,
   },
 });
